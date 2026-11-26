@@ -202,6 +202,8 @@ export function profileFacts(profile: Profile): Record<string, string> {
   out.authorized_countries = profile.workAuthorization.authorizedCountries.join(", ");
   const later = sponsorshipLater(profile);
   if (later.length) out.authorized_now_but_needs_sponsorship_later_in = later.join(", ");
-  out.requires_sponsorship_outside_authorized_countries = profile.workAuthorization.requiresSponsorshipElsewhere ? "Yes" : "No";
+  // Only what the person said. Left out of the profile, it is no fact at all, so a form that asks goes to review.
+  const elsewhere = profile.workAuthorization.requiresSponsorshipElsewhere;
+  if (elsewhere !== undefined) out.requires_sponsorship_outside_authorized_countries = elsewhere ? "Yes" : "No";
   return out;
 }

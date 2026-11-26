@@ -12,7 +12,7 @@ import path from "node:path";
 import { z } from "zod";
 import { childEnv, DOCUMENTS, PATHS, WRITER, writerApi, writerBackend, writerModel } from "../config.js";
 import type { QueueEntry } from "../jobs/queue.js";
-import type { Profile } from "../profile/schema.js";
+import { candidatePreferences, type Profile } from "../profile/schema.js";
 import { BANK_DRAFTS, BANK_INTENTS } from "./bank.js";
 import { answerContext, jobContext } from "./context.js";
 import { fingerprintOf, Resolution, type OpenField } from "./memory.js";
@@ -67,7 +67,7 @@ export function candidateContext(profile: Profile): Record<string, unknown> {
       address: `${profile.address.city}, ${profile.address.region}, ${profile.address.country}`,
       spokenLanguages: profile.spokenLanguages,
       demographics: profile.demographics,
-      preferences: profile.preferences,
+      preferences: candidatePreferences(profile),
       workAuthorization: profile.workAuthorization,
     },
     /** Starting drafts for common questions. Adapt one to the question and the company; text in braces is for you to write. */

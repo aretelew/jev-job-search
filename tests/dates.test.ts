@@ -80,3 +80,17 @@ describe("showsValue", () => {
     expect(showsValue("2027", "2026")).toBe(false);
   });
 });
+describe("showsValue, one value inside another", () => {
+  it("matches whole words only, so one answer is never read as another that contains it", () => {
+    expect(showsValue("Male", "Female")).toBe(false);
+    expect(showsValue("Female", "Male")).toBe(false);
+    expect(showsValue("Binary", "Non-binary")).toBe(false);
+    expect(showsValue("Male", "Male")).toBe(true);
+  });
+  it("still verifies a value shown with something around it", () => {
+    expect(showsValue("Male", "Male (he/him)")).toBe(true);
+    expect(showsValue("Female", "Female, she/her")).toBe(true);
+    expect(showsValue("Portland", "Portland, Oregon")).toBe(true);
+    expect(showsValue("linkedin.com/in/someone", "https://linkedin.com/in/someone")).toBe(true);
+  });
+});

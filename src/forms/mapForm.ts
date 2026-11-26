@@ -15,7 +15,7 @@ import type { JevClient } from "../jev/client.js";
 import { choice, noul } from "../jev/questions.js";
 import type { Answer, ChoiceAnswer, NoulAnswer, Questions } from "../jev/types.js";
 import { ALL_KEYS, isProfileKey, isSpecialKey, profileFacts, valueFor, type FieldKey } from "../profile/fieldKeys.js";
-import { monthName, sponsorshipLater, type Profile } from "../profile/schema.js";
+import { candidatePreferences, monthName, sponsorshipLater, type Profile } from "../profile/schema.js";
 import { BANK_INTENTS } from "../answers/bank.js";
 import { countryOfLocations, locationTier } from "../jobs/hardFilters.js";
 import type { Job } from "../jobs/normalize.js";
@@ -58,7 +58,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
         notes: profile.facts,
       },
       demographics: profile.demographics,
-      preferences: profile.preferences,
+      preferences: candidatePreferences(profile),
       /** The candidate's own answers to recurring questions. They outrank any guess. */
       standing_answers: profile.answers,
       gpa_policy: "Only give a GPA if the field is required. The cumulative GPA is " + (profile.education[0]?.gpa?.cumulative ?? "not provided") + " on a 4.0 scale.",
@@ -90,7 +90,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 11;
+const PLAN_VERSION = 15;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -179,11 +179,40 @@ export function truthFor(category: Category, label: string, profile: Profile, jo
 /** True when the person's standing answers say the tool may accept agreements for them. */
 export const approvesAgreements = (profile: Profile): boolean => profile.answers.some((a) => /agreement|acknowledg|terms|attestation/i.test(a.question) && /\b(i agree|tick)\b/i.test(a.answer));
 
+type Gated = Pick<DumpedField, "label" | "section" | "hint" | "kind">;
+
+/** A value as an approval names it: a ticked box is "checked" however a caller spells it. */
+const approvalValue = (f: Gated, value: string) => {
+  const v = value.trim().replace(/\s+/g, " ").toLowerCase();
+  return f.kind === "checkbox" && /^(true|checked|yes|on|1)$/.test(v) ? "checked" : v;
+};
+
 /**
- * Why an answer about the right to work may not go in, or null when it may: the option must say
- * what the profile says for the country the question means. Used for JEV's picks and the writer's.
+ * Why accepting this may not be done for the person, or null when it may. A field accepts something
+ * when it is a tick box worded as an agreement, or a pick whose chosen option consents ("I agree",
+ * "Yes, I consent"). Declining accepts nothing. An approval the person gave for this field on this
+ * posting always lets it go in. Otherwise, with reviewAgreements every agreement waits for them;
+ * without it, only one that is not routine and not covered by a standing answer does.
  */
-export function gateAnswer(f: Pick<DumpedField, "label" | "section" | "hint" | "kind">, value: string, profile: Profile, job: Job): string | null {
+export function agreementHold(f: Gated, value: string, profile: Profile, job: Job): string | null {
+  if (polarity(value) === "No" || /^(false|0|unchecked)$/i.test(value.trim())) return null;
+  const accepts = categoryOf(f) === "agreement" || ((f.kind === "radio" || f.kind === "select" || f.kind === "combobox") && AGREEMENT_Q.test(value));
+  if (!accepts) return null;
+  const label = f.label.trim().replace(/\s+/g, " ");
+  if (profile.preferences.approvedAgreements?.some((a) => a.jobId === job.id && a.label.trim().replace(/\s+/g, " ") === label && approvalValue(f, a.value) === approvalValue(f, value))) return null;
+  if (profile.preferences.reviewAgreements) return "this agreement or acknowledgment needs the candidate's explicit approval";
+  if (ROUTINE_AGREEMENT.test(f.label) || approvesAgreements(profile)) return null;
+  return "accepting this is yours to decide; a standing answer about agreements lets the tool tick it";
+}
+
+/**
+ * Why an answer may not go in, or null when it may: an agreement the person has not approved
+ * (agreementHold), or an answer about the right to work that does not say what the profile says for
+ * the country the question means. Used for JEV's picks and the writer's.
+ */
+export function gateAnswer(f: Gated, value: string, profile: Profile, job: Job): string | null {
+  const hold = agreementHold(f, value, profile, job);
+  if (hold) return hold;
   const category = categoryOf(f);
   if (category !== "authorization" && category !== "sponsorship") return null;
   const truth = truthFor(category, f.label, profile, job);
@@ -372,7 +401,9 @@ export async function mapForm(jev: JevClient, profile: Profile, job: Job, dump: 
   // The values a form happens to hold (an earlier fill, an autofill) do not change what belongs in it.
   const fields = dump.fields.map(({ value: _value, checked: _checked, ...rest }) => rest);
   // A plan made with the profile's resume is not the plan for a run that wants a tailored one, and the other way round.
-  const key = hashOf({ fields, submit: dump.submitSelectors, state: buildFormState(profile, job, { ...dump, url: "" }, []), form: FORM, documents: documentPolicy(), version: PLAN_VERSION });
+  // The agreement gate reads the person's approvals for this job and whether agreements wait for review: the plan changes with them.
+  const agreements = { review: !!profile.preferences.reviewAgreements, approved: (profile.preferences.approvedAgreements ?? []).filter((a) => a.jobId === job.id) };
+  const key = hashOf({ fields, submit: dump.submitSelectors, state: buildFormState(profile, job, { ...dump, url: "" }, []), agreements, form: FORM, documents: documentPolicy(), version: PLAN_VERSION });
   const hit = plans.get(key);
   if (hit) return { ...hit, jobId: job.id, url: dump.url, jevCostUsd: 0 };
   const plan = await mapFormFresh(jev, profile, job, dump);
@@ -503,10 +534,9 @@ export function planField(f: DumpedField, answer: Answer | undefined, profile: P
     }
     const p = (answer as NoulAnswer).noul;
     if (p >= FORM.gates.tick) {
-      // Accepting an agreement is the person's: the tool ticks it when their standing answers say so, or when it only says the application is true.
-      if (categoryOf(f) === "agreement" && !ROUTINE_AGREEMENT.test(f.label) && !approvesAgreements(profile)) {
-        return { ...base, action: "review", key: "unknown", value: null, confidence: p, note: "accepting this is yours to decide; a standing answer about agreements lets the tool tick it" };
-      }
+      // Accepting an agreement is the person's (agreementHold); a right-to-work box must say what the profile says.
+      const refused = gateAnswer(f, "true", profile, job);
+      if (refused) return { ...base, action: "review", key: "unknown", value: null, confidence: p, note: refused };
       return { ...base, action: "fill", key: "checked", value: "true", confidence: p, note: null };
     }
     if (p <= FORM.gates.leave) return { ...base, action: "skip", key: "unchecked", value: null, confidence: 1 - p, note: "left unchecked" };

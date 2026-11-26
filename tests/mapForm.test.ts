@@ -376,3 +376,54 @@ describe("a date asked for in three boxes", () => {
     expect(datePart("Month", "as soon as possible")).toBeNull();
   });
 });
+
+
+describe("agreements the person has not approved", () => {
+it("holds unapproved acknowledgments across widgets and writer answers when requested", () => {
+  const strict = { ...profile, preferences: { ...profile.preferences, reviewAgreements: true } };
+  const yes = { type: "choice" as const, choice: "o0", probabilities: { o0: 1 }, confidence: 1 };
+  for (const kind of ["radio", "select", "combobox"] as const) {
+    const f = field({ kind, label: "Arbitration Acknowledgment", required: true, options: [{ label: "I Acknowledge/Accept this Statement", value: "accept" }] });
+    expect(planField(f, yes, strict, job(["Seattle, WA"])).action).toBe("review");
+    expect(gateAnswer(f, "I Acknowledge/Accept this Statement", strict, job(["Seattle, WA"]))).toMatch(/approval/);
+  }
+  const privacy = field({ kind: "checkbox", label: "I acknowledge the privacy policy", required: true });
+  const opaque = field({ kind: "radio", label: "customQuestions.example", required: true, options: [{ label: "Yes, I consent", value: "yes" }] });
+  expect(planField(opaque, yes, strict, job(["Seattle, WA"])).action).toBe("review");
+  expect(planField(privacy, { type: "noul", noul: 1 }, strict, job(["Seattle, WA"])).action).toBe("review");
+  expect(gateAnswer(field({ kind: "radio", label: "Consent to text messages" }), "No - I do not consent", strict, job(["Seattle, WA"]))).toBeNull();
+});
+
+it("uses explicit agreement approval only for the exact posting, label, and answer", () => {
+  const strict = { ...profile, preferences: { ...profile.preferences, reviewAgreements: true, approvedAgreements: [{ jobId: "j", label: "Candidate AI Usage Attestation:", value: "I agree" }] } };
+  const f = field({ kind: "combobox", label: "Candidate AI Usage Attestation: ", required: true, options: [{ label: "I agree", value: "agree" }] });
+  const j = job(["Seattle, WA"]);
+  expect(gateAnswer(f, "I agree", strict, j)).toBeNull();
+  expect(planField(f, { type: "choice", choice: "o0", probabilities: { o0: 1 }, confidence: 1 }, strict, j).action).toBe("fill");
+  expect(gateAnswer(f, "I agree", strict, { ...j, id: "other" })).toMatch(/approval/);
+  expect(gateAnswer({ ...f, label: "Arbitration Acknowledgment" }, "I agree", strict, j)).toMatch(/approval/);
+  expect(gateAnswer(f, "I agree to additional terms", strict, j)).toMatch(/approval/);
+});
+
+it("never holds a question that only mentions terms, or a written answer that uses the word", () => {
+  const strict = { ...profile, preferences: { ...profile.preferences, reviewAgreements: true } };
+  const j = job(["Seattle, WA"]);
+  expect(gateAnswer(field({ kind: "select", label: "Which work terms are you available for?" }), "Summer 2027", strict, j)).toBeNull();
+  expect(gateAnswer(field({ kind: "textarea", label: "Why do you want to join us?" }), "I would accept any team where I can ship code.", strict, j)).toBeNull();
+});
+
+it("reads an approved tick box the same however its value is spelled", () => {
+  const approved = { ...profile, preferences: { ...profile.preferences, reviewAgreements: true, approvedAgreements: [{ jobId: "j", label: "I agree to the arbitration terms", value: "yes" }] } };
+  const box = field({ kind: "checkbox", label: "I agree to the arbitration terms", required: true });
+  expect(gateAnswer(box, "true", approved, job(["Seattle, WA"]))).toBeNull();
+  expect(planField(box, { type: "noul", noul: 1 }, approved, job(["Seattle, WA"])).action).toBe("fill");
+});
+});
+
+describe("needing sponsorship outside the authorized countries", () => {
+  it("is a fact only when the profile says it", () => {
+    const silent = { ...profile, workAuthorization: { ...profile.workAuthorization, requiresSponsorshipElsewhere: undefined } };
+    expect(profileFacts(silent)).not.toHaveProperty("requires_sponsorship_outside_authorized_countries");
+    expect(profileFacts({ ...profile, workAuthorization: { ...profile.workAuthorization, requiresSponsorshipElsewhere: true } }).requires_sponsorship_outside_authorized_countries).toBe("Yes");
+  });
+});

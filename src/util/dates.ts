@@ -86,6 +86,12 @@ export function showsPicked(want: string, shown: string): boolean {
  * gains brackets, a link gains its scheme, a date is written in the box's own format, and a long
  * answer loses its double spaces. What they must not do is show something else.
  */
+/** True when `part` appears in `whole` as whole words. A hyphen joins words, so "binary" is not in "non-binary". */
+function hasWords(whole: string, part: string): boolean {
+  const edge = "[^a-z0-9-]";
+  return new RegExp(`(?:^|${edge})${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|${edge})`).test(whole);
+}
+
 export function showsValue(want: string, shown: string): boolean {
   const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
   const w = norm(want);
@@ -98,8 +104,9 @@ export function showsValue(want: string, shown: string): boolean {
   if (w.length <= FORM.shortAnswerChars || /^(yes|no|true|false|none|n\/a)$/.test(w)) {
     return s.startsWith(w) && /^\s*[,.;:(\-\u2013]/.test(s.slice(w.length));
   }
-  // One inside the other: a city shown with its region, a link shown without its scheme. A bare number is not loose like that.
-  if ((/[a-z]/.test(w) || w.length >= 4) && (s.includes(w) || w.includes(s))) return true;
+  // One inside the other, as whole words: a city shown with its region, a link shown without its scheme.
+  // "Male" is not inside "Female", nor "Binary" inside "Non-binary". A bare number is not loose like that.
+  if ((/[a-z]/.test(w) || w.length >= 4) && (hasWords(s, w) || hasWords(w, s))) return true;
   // Numbers: the same digits, or a phone shown with the country code the box added in front.
   const digits = (x: string) => x.replace(/\D/g, "");
   const dw = digits(w);
@@ -113,8 +120,10 @@ export function showsValue(want: string, shown: string): boolean {
   // A place picked from a list comes back in the list's own spelling: "Edmonton, Alberta, Canada" shows as "Edmonton, AB, CAN".
   const place = (x: string) => x.split(",")[0]?.trim() ?? "";
   if (w.includes(",") && s.includes(",") && place(w).length >= 3 && place(w) === place(s)) return true;
-  // A pick shown as its short form: "Canada" chosen, "+1 CA" shown.
-  if (/[a-z]/.test(w) && s.split(/[^a-z]+/).some((part) => part.length >= 2 && (w.split(/[^a-z]+/)[0] ?? "").startsWith(part))) return true;
+  // A pick shown as its short form: "Canada" chosen, "+1 CA" shown. A short form is shorter than the word,
+  // so a whole word inside another answer ("binary" in "non-binary") is not one.
+  const first = w.split(/[^a-z]+/)[0] ?? "";
+  if (/[a-z]/.test(w) && s.split(/[^a-z]+/).some((part) => part.length >= 2 && part.length < first.length && first.startsWith(part))) return true;
   const bare = (x: string) => x.replace(/^https?:\/\/(www\.)?/, "").replace(/\/+$/, "");
   return bare(w) === bare(s);
 }
