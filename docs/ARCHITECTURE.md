@@ -275,12 +275,19 @@ and nothing else.
 ## The dashboard (`src/report/`) and replies (`src/mail/status.ts`)
 
 The dashboard is the tool's main screen for a person: `server.ts` serves
-one page and a few JSON routes on localhost, `page.ts` is that page with
-its style and script inline, `data.ts` builds the totals and the table,
+one page and a few JSON routes on localhost, `page.ts` writes the token
+and the statuses into that page, `data.ts` builds the totals and the table,
 and `needs.ts` builds what waits for the person and saves what they
 answer. A POST is taken only from the page itself (`fromThisPage`), as
 JSON, with the token the server made at start and put in that page
 (`hasToken`).
+
+The page itself is a small React app with shadcn components in `web/`. It
+is built into one HTML file with its script, style and font inline and
+committed at `src/report/web/index.html`, so the tool needs no build and
+no runtime dependency for it, and the page fetches nothing from the
+network. Its packages are in `web/package.json` and are needed only to
+change the page: `cd web && npm install && npm run build`.
 
 `buildNeeds` reads the queue and each set-aside job's last report. A
 review field becomes a question; `questionFor` decides whether the page

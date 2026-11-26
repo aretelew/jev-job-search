@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { DISCOVER } from "../src/config.js";
+import { isEarlyCareerTitle } from "../src/discover.js";
 import { locationTier, preFilter } from "../src/jobs/hardFilters.js";
 import type { Job } from "../src/jobs/normalize.js";
-import { FIT_QUESTIONS, fitQuestions, scoreFromAnswers } from "../src/jobs/rate.js";
-import { usStatus } from "../src/profile/schema.js";
+import { FIT_QUESTIONS, fitQuestions, ratingContext, scoreFromAnswers } from "../src/jobs/rate.js";
+import { ProfileSchema, usStatus } from "../src/profile/schema.js";
 import type { Answer } from "../src/jev/types.js";
+
+const SEARCHING = { authorized: true, citizen: true, requireSearchMatch: true };
+const exampleProfile = () => ProfileSchema.parse(JSON.parse(readFileSync(new URL("../data/profile.example.json", import.meta.url), "utf8")));
 
 const now = new Date("2026-10-02T12:00:00Z");
 const job = (over: Partial<Job> = {}): Job => ({
@@ -40,13 +45,18 @@ describe("preFilter", () => {
     expect(preFilter(job({ ats: "amazon" }), now)).toMatch(/account/);
   });
   it("rejects stale postings but keeps undated ones", () => {
-    expect(preFilter(job({ postedAt: "2026-09-01" }), now)).toMatch(/days ago/);
+    const stale = new Date(now.getTime() - (DISCOVER.maxAgeDays + 1) * 86_400_000).toISOString().slice(0, 10);
+    expect(preFilter(job({ postedAt: stale }), now)).toMatch(/days ago/);
     expect(preFilter(job({ postedAt: null }), now)).toBeNull();
   });
   it("rejects non-software titles unless they also say software", () => {
     expect(preFilter(job({ title: "Hardware Engineer Intern" }), now)).toMatch(/not a software role/);
     expect(preFilter(job({ title: "Product Manager Intern" }), now)).toMatch(/not a software role/);
     expect(preFilter(job({ title: "Software Engineer Intern, Hardware Tools" }), now)).toBeNull();
+    // Data science and research titles are often ML engineering: the rater decides, not the title.
+    expect(preFilter(job({ title: "Data Scientist Intern" }), now)).toBeNull();
+    expect(preFilter(job({ title: "Research Scientist Intern" }), now)).toBeNull();
+    expect(preFilter(job({ title: "Embedded Hardware & Firmware Intern" }), now)).toBeNull();
   });
   it("rejects US roles with no sponsorship or citizenship flags, but not Canadian ones", () => {
     expect(preFilter(job({ locations: ["Austin, TX"], sponsorship: "none" }), now)).toMatch(/no sponsorship/);
@@ -113,8 +123,8 @@ describe("scoreFromAnswers", () => {
     expect(scoreFromAnswers(job(), answers({ needs_advanced_degree: { noul: 0.9 } }), now).skipReason).toMatch(/degree/);
     expect(scoreFromAnswers(job({ locations: ["SF"] }), answers({ work_auth: { choice: "us_no_sponsorship", confidence: 0.8 } }), now).skipReason).toMatch(/no sponsorship/);
     expect(scoreFromAnswers(job({ locations: ["SF"] }), answers({ work_auth: { choice: "us_citizenship_required", confidence: 0.8 } }), now).skipReason).toMatch(/citizenship/);
-    expect(scoreFromAnswers(job({ locations: ["SF"] }), answers({ work_auth: { choice: "us_no_sponsorship", confidence: 0.8 } }), now, { authorized: true, citizen: false }).skipReason).toBeNull();
-    expect(scoreFromAnswers(job({ locations: ["SF"] }), answers({ work_auth: { choice: "us_citizenship_required", confidence: 0.8 } }), now, { authorized: true, citizen: true }).skipReason).toBeNull();
+    expect(scoreFromAnswers(job({ locations: ["SF"] }), answers({ work_auth: { choice: "us_no_sponsorship", confidence: 0.8 } }), now, { authorized: true, citizen: false, requireSearchMatch: false }).skipReason).toBeNull();
+    expect(scoreFromAnswers(job({ locations: ["SF"] }), answers({ work_auth: { choice: "us_citizenship_required", confidence: 0.8 } }), now, { authorized: true, citizen: true, requireSearchMatch: false }).skipReason).toBeNull();
     expect(scoreFromAnswers(job(), answers({ requires_references: { noul: 0.95 } }), now).skipReason).toMatch(/references/);
   });
   it("only trusts the account signal when the ATS is unknown", () => {
@@ -141,7 +151,7 @@ describe("graduation window and account walls", () => {
     expect(scoreFromAnswers(job(), old, now).score).toBe(scoreFromAnswers(job(), answers(), now).score);
   });
   it("words the term and graduation questions from the profile's own graduation date", () => {
-    const q = fitQuestions({ education: [{ school: "U", degree: "BSc", field: "CS", startMonth: 9, startYear: 2025, gradMonth: 12, gradYear: 2028, status: "in_progress" }] });
+    const q = fitQuestions({ ...exampleProfile(), education: [{ school: "U", degree: "BSc", field: "CS", startMonth: 9, startYear: 2025, gradMonth: 12, gradYear: 2028, status: "in_progress" }] });
     expect(JSON.stringify(q.term)).toContain("Summer 2028");
     expect(JSON.stringify(q.graduation_excluded)).toContain("December 2028");
     for (const k of Object.keys(answers())) expect(q).toHaveProperty(k);
@@ -149,9 +159,10 @@ describe("graduation window and account walls", () => {
   it("skips careers sites that need an account and boards whose forms cannot be read", () => {
     expect(preFilter(job({ url: "https://acme.eightfold.ai/careers/job/1", ats: "other" }), now, () => true)).toMatch(/account/);
     // An older posting passes when one search asks for more days.
-    const old = job({ postedAt: new Date(now.getTime() - 20 * 86_400_000).toISOString().slice(0, 10) });
-    expect(preFilter(old, now, () => false)).toMatch(/posted 20 days ago/);
-    expect(preFilter(old, now, () => false, { authorized: false, citizen: false }, 30)).toBeNull();
+    const days = DISCOVER.maxAgeDays + 6;
+    const old = job({ postedAt: new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10) });
+    expect(preFilter(old, now, () => false)).toMatch(new RegExp(`posted ${days} days ago`));
+    expect(preFilter(old, now, () => false, { authorized: false, citizen: false }, days + 10)).toBeNull();
     // Jobvite's forms run over several pages, which the runner walks. SmartRecruiters' cannot be read yet.
     expect(preFilter(job({ ats: "jobvite" }), now, () => false)).toBeNull();
     expect(preFilter(job({ ats: "smartrecruiters" }), now, () => false)).toMatch(/cannot be read/);
@@ -170,7 +181,52 @@ describe("usStatus", () => {
     const later = { workAuthorization: { ...wa(["Canada"], ["Canada"]).workAuthorization, authorizedWithSponsorshipLater: ["U.S."] } };
     expect(usStatus(later)).toEqual({ authorized: false, citizen: false });
     const refuses = answers({ work_auth: { choice: "us_no_sponsorship", confidence: 0.8 } });
-    expect(scoreFromAnswers(job({ locations: ["SF"] }), refuses, new Date("2026-11-01"), usStatus(later)).skipReason).toMatch(/no sponsorship/);
+    expect(scoreFromAnswers(job({ locations: ["SF"] }), refuses, new Date("2026-11-01"), { ...usStatus(later), requireSearchMatch: false }).skipReason).toMatch(/no sponsorship/);
   });
 });
 
+
+
+describe("company boards", () => {
+  it("count a title that names the internship year or the graduation year as early-career", () => {
+    expect(isEarlyCareerTitle("Software Engineer, Summer 2027", [2027, 2028])).toBe(true);
+    expect(isEarlyCareerTitle("Software Engineer, Class of 2028", [2027, 2028])).toBe(true);
+    expect(isEarlyCareerTitle("Staff Software Engineer", [2027, 2028])).toBe(false);
+  });
+});
+
+describe("mandatory search conditions", () => {
+  const searching = () => {
+    const profile = exampleProfile();
+    profile.education[0]!.gradMonth = 5;
+    profile.education[0]!.gradYear = 2028;
+    profile.preferences.internshipYear = 2027;
+    profile.preferences.searchRequirements = "Internships in the United States or EU only";
+    return profile;
+  };
+  it("words the terms for the internship year and the new-graduate option for the real graduation date", () => {
+    const questions = fitQuestions(searching());
+    const term = JSON.stringify(questions.term);
+    expect(term).toContain("Summer 2027");
+    expect(term).toContain("graduating in May 2028");
+    expect(term).not.toContain("graduating in May 2027");
+    expect(JSON.stringify(questions.graduation_excluded)).toContain("May 2028");
+    expect(JSON.stringify(questions.search_requirements_met)).toContain("United States or EU only");
+  });
+  it("is required exactly when the profile names conditions", () => {
+    expect(ratingContext(searching()).requireSearchMatch).toBe(true);
+    expect(ratingContext(exampleProfile()).requireSearchMatch).toBe(false);
+    expect(fitQuestions(exampleProfile())).not.toHaveProperty("search_requirements_met");
+  });
+  it("rejects a posting the rater is not sure meets them, or a missing answer, despite a strong score", () => {
+    for (const noul of [0, DISCOVER.searchMatchConfidence - 0.01]) {
+      const a = answers();
+      a.search_requirements_met = { type: "noul", noul };
+      expect(scoreFromAnswers(job(), a, now, SEARCHING).decision).toBe("skip");
+    }
+    expect(scoreFromAnswers(job(), answers(), now, SEARCHING).decision).toBe("skip");
+    const a = answers();
+    a.search_requirements_met = { type: "noul", noul: DISCOVER.searchMatchConfidence };
+    expect(scoreFromAnswers(job(), a, now, SEARCHING).decision).toBe("apply");
+  });
+});

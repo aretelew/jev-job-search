@@ -14,26 +14,35 @@ import { hashOf, type KeyedCache } from "../util/cache.js";
 
 const LEVELS5 = ["None", "Weak", "Partial", "Strong", "Near exact"];
 
-/** The term criteria, worded for the candidate's own graduation year so the same code serves any class. */
-function termCriteria(gradMonth: number, gradYear: number): Record<string, string> {
+/**
+ * The term criteria. The terms are worded for the year the candidate wants an internship in, and the
+ * new-graduate option for their real graduation date, so the same code serves any class.
+ */
+function termCriteria(gradMonth: number, gradYear: number, termYear: number): Record<string, string> {
   const grad = `${monthName(gradMonth)} ${gradYear}`;
   return {
-    summer: `Summer ${gradYear} internship or co-op (roughly May to August ${gradYear})`,
+    summer: `Summer ${termYear} internship or co-op (roughly May to August ${termYear})`,
     new_grad: `Full-time role a candidate graduating in ${grad} could start by mid ${gradYear}`,
-    winter: `Winter or Spring ${gradYear} term (January to April ${gradYear})`,
-    earlier: `Fall ${gradYear - 1} or starts before January ${gradYear}`,
+    winter: `Winter or Spring ${termYear} term (January to April ${termYear})`,
+    earlier: `Fall ${termYear - 1} or starts before January ${termYear}`,
     other: "A different term, rolling with no term stated, or unclear",
   };
 }
 
 /** Every question for one posting, with the term and graduation wording taken from the profile. */
-export function fitQuestions(profile: Pick<Profile, "education">): Questions {
+export function fitQuestions(profile: Pick<Profile, "education" | "preferences">): Questions {
   const edu = profile.education[0];
   const month = edu?.gradMonth ?? 4;
   const year = edu?.gradYear ?? new Date().getUTCFullYear() + 1;
   return {
     ...FIT_QUESTIONS,
-    term: choice("Which term or start does this posting target?", termCriteria(month, year)),
+    term: choice("Which term or start does this posting target?", termCriteria(month, year, profile.preferences.internshipYear ?? year)),
+    ...(profile.preferences.searchRequirements ? {
+      search_requirements_met: noul(`Does this posting meet ALL these mandatory search conditions? ${profile.preferences.searchRequirements}`, {
+        true: "No condition as written is contradicted. Missing or unstated details (exact dates, work authorization, a thin, empty or unreadable description) do not count against the posting: trust the title and the source's tags when the description is silent. A requirement the posting sets that the candidate meets is not a contradiction.",
+        false: "The posting clearly contradicts one of the conditions as written.",
+      }),
+    } : {}),
     graduation_excluded: noul(`Does the posting require a graduation date or year of study that a candidate graduating in ${monthName(month)} ${year} does not meet?`, {
       true: `It names a graduation window, class year or "returning to school after" rule that excludes ${monthName(month)} ${year}`,
       false: `No graduation requirement is stated, or ${monthName(month)} ${year} fits it`,
@@ -42,9 +51,9 @@ export function fitQuestions(profile: Pick<Profile, "education">): Questions {
 }
 
 export const FIT_QUESTIONS: Questions = {
-  is_software_role: noul("Is this a software engineering or software developer role (writing application, backend, frontend, mobile, infrastructure or platform code)?", {
-    true: "The day-to-day work is writing software",
-    false: "Hardware, data science, analytics, product, research, IT support, or anything else",
+  is_software_role: noul("Is this a software engineering role, where the day-to-day work is writing code?", {
+    true: "Writing code is the job: application, backend, frontend, mobile, infrastructure or platform, machine learning or data engineering, security engineering, embedded or firmware, or test automation",
+    false: "Writing code is not the job: hardware, analytics or reporting, product or program management, research that is not engineering, IT support, or anything else",
   }),
   level: choice("What level is this posting?", {
     internship: "Internship, co-op, student or work term",
@@ -62,7 +71,7 @@ export const FIT_QUESTIONS: Questions = {
     remote_global: "Remote and open to candidates in any country",
     unclear: "Not stated and not inferable",
   }),
-  term: choice("Which term or start does this posting target?", termCriteria(4, new Date().getUTCFullYear() + 1)),
+  term: choice("Which term or start does this posting target?", termCriteria(4, new Date().getUTCFullYear() + 1, new Date().getUTCFullYear() + 1)),
   graduation_excluded: noul("Does the posting require a graduation date or year of study the candidate does not meet?"),
   returning_student_required: noul("Does the posting require the candidate to return to school after the internship?"),
   stack_match: score("How well does the candidate's technical stack match what the posting asks for?", LEVELS5),
@@ -138,10 +147,19 @@ export async function rateJob(jev: JevClient, job: Job, profile: Profile, now = 
     answers = await jev.decide(buildFitState(job, profile, now), fitQuestions(profile), `rate:${job.company}:${job.title}`);
     cache?.set(key, answers);
   }
-  return scoreFromAnswers(job, answers, now, usStatus(profile));
+  return scoreFromAnswers(job, answers, now, ratingContext(profile));
 }
 
-export function scoreFromAnswers(job: Job, answers: Record<string, Answer>, now = new Date(), us: { authorized: boolean; citizen: boolean } = { authorized: false, citizen: false }): FitResult {
+/** What about the candidate decides a rating, beside the answers: their US status, and whether their search conditions must be met. */
+export type RatingContext = { authorized: boolean; citizen: boolean; requireSearchMatch: boolean };
+const NO_CONTEXT: RatingContext = { authorized: false, citizen: false, requireSearchMatch: false };
+
+export function ratingContext(profile: Pick<Profile, "workAuthorization" | "preferences">): RatingContext {
+  return { ...usStatus(profile), requireSearchMatch: !!profile.preferences.searchRequirements };
+}
+
+export function scoreFromAnswers(job: Job, answers: Record<string, Answer>, now = new Date(), ctx: RatingContext = NO_CONTEXT): FitResult {
+  const us = ctx;
   // A rating saved before a question existed simply lacks it; that reads as "no".
   const n = (k: string) => (answers[k] as NoulAnswer | undefined)?.noul ?? 0;
   const c = (k: string) => answers[k] as ChoiceAnswer;
@@ -152,7 +170,8 @@ export function scoreFromAnswers(job: Job, answers: Record<string, Answer>, now 
   const tier: LocationTier = codeTier !== "unclear" ? codeTier : (c("location_tier").choice as LocationTier);
 
   let skipReason: string | null = null;
-  if (n("is_software_role") < 0.5) skipReason = "not a software role";
+  if (ctx.requireSearchMatch && n("search_requirements_met") < DISCOVER.searchMatchConfidence) skipReason = "contradicts your mandatory search conditions";
+  else if (n("is_software_role") < DISCOVER.softwareRoleMin) skipReason = "not a software role";
   else if (c("level").choice === "experienced" && c("level").confidence >= 0.6) skipReason = "requires professional experience";
   else if (n("is_unpaid") > 0.7) skipReason = "unpaid";
   else if (n("needs_advanced_degree") > 0.7) skipReason = "advanced degree required";

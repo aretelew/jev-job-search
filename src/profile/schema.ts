@@ -107,8 +107,8 @@ export const ProfileSchema = z.object({
      * `authorizedCountries` names it as well.
      */
     authorizedWithSponsorshipLater: z.array(z.string()).optional(),
-    /** Whether sponsorship would be needed in any country not listed above. */
-    requiresSponsorshipElsewhere: z.boolean(),
+    /** Whether sponsorship would be needed in any country not listed above. Left out, the tool never answers it. */
+    requiresSponsorshipElsewhere: z.boolean().optional(),
     /** One sentence, used verbatim when a form asks to explain status. */
     statement: z.string(),
   }),
@@ -122,6 +122,13 @@ export const ProfileSchema = z.object({
     transgender: YesNoDecline,
   }),
   preferences: z.object({
+    /** Hold affirmative agreements and acknowledgments for the candidate's own review. */
+    reviewAgreements: z.boolean().optional(),
+    /** Explicit approval for one exact answer on one posting; other agreements still require review. */
+    approvedAgreements: z.array(z.object({ jobId: z.string(), label: z.string(), value: z.string() })).optional(),
+    /** Mandatory search conditions; ambiguous matches stay out of the application queue. */
+    searchRequirements: z.string().optional(),
+    internshipYear: z.number().int().optional(),
     earliestStart: z.string(),
     availability: z.string(),
     /** Left empty on purpose: the tool never volunteers a number. */
@@ -180,6 +187,16 @@ export function sponsorshipLater(profile: Pick<Profile, "workAuthorization">): s
  * `authorized` means authorized without sponsorship, now and later: a candidate who will need
  * sponsorship later (US OPT) is not, since a posting that refuses sponsorship refuses them.
  */
+/**
+ * The preferences a form or a written answer may draw on. The tool's own settings stay out: the
+ * agreements approved for other postings, whether agreements wait for review, and the search
+ * conditions only decide what the tool does, never what a form is told.
+ */
+export function candidatePreferences(profile: Pick<Profile, "preferences">) {
+  const { approvedAgreements: _approved, reviewAgreements: _review, searchRequirements: _search, internshipYear: _year, ...rest } = profile.preferences;
+  return rest;
+}
+
 export function usStatus(profile: Pick<Profile, "workAuthorization">): { authorized: boolean; citizen: boolean } {
   const isUs = (c: string) => /^(united states( of america)?|u\.?s\.?a?\.?)$/i.test(c.trim());
   const later = sponsorshipLater(profile).some(isUs);

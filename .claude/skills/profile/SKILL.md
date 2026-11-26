@@ -21,6 +21,27 @@ If `data/profile.json` does not exist, this is a first run: use the
    | How a recurring question is answered (relocation, text messages, notice period, pay, history) | `answers` in `data/profile.json` |
    | How written answers sound | `data/voice.local.md` |
    | The starting draft for a common open question | `data/bank.json` |
+   | Which jobs are searched for | `preferences` in `data/profile.json` (below) |
+   | Agreements the tool may accept | `preferences.reviewAgreements` and `preferences.approvedAgreements` (below) |
+
+   Optional settings in `preferences`, all left out by default:
+
+   - `searchRequirements`: the person's mandatory search conditions, in
+     their own words ("Only summer internships in the United States").
+     A job that clearly contradicts them is skipped. Missing detail in a
+     posting does not count against it.
+   - `internshipYear`: the year of the internship they want, when it is not
+     the year they graduate. The term questions use it; graduation stays
+     the real date.
+   - `reviewAgreements: true`: every agreement, acknowledgment or consent
+     waits for the person, even routine ones.
+   - `approvedAgreements`: answers the person approved for one posting:
+     `{ "jobId", "label", "value" }`, with the field's label as the form
+     shows it and the option they chose ("checked" for a tick box). Add one
+     only when the person said yes to that exact agreement on that job.
+
+   `requiresSponsorshipElsewhere` in `workAuthorization` may be left out;
+   then the tool never answers a question about it and sends it to review.
 
    The full list of questions the profile answers is in
    [../setup/questions.md](../setup/questions.md).

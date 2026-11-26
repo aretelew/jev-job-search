@@ -21,7 +21,7 @@ terminal.
 | `/daily pause` | Removes the schedule, so no further run starts by itself. A run that is working carries on |
 | `/daily stop` | Asks the run that is working now to stop. It finishes the application it is on and opens no other |
 
-The same switches are on the dashboard's Automation screen (`/report`).
+The same switches are on the dashboard's Daily run screen (`/report`).
 
 ## 1. Write your standing policy
 
@@ -159,11 +159,11 @@ number, but there is no reason to run twice.
 
 These are three different things.
 
-- **Pause future runs**: `/daily pause`, the dashboard's "Pause future
-  runs", or `npx jev schedule remove`. No further run starts by itself. A
+- **Pause future runs**: `/daily pause`, turning off "Run every day" on
+  the dashboard, or `npx jev schedule remove`. No further run starts by itself. A
   run that is already working is not touched.
 - **Stop the run that is working**: `/daily stop`, the dashboard's "Stop
-  it after this application", or `npx jev daily --stop`. The run finishes
+  after this application", or `npx jev daily --stop`. The run finishes
   the application it is on, so no form is left half sent, opens no other,
   and writes its summary.
 - **Turn it off for good**: remove the schedule and delete
