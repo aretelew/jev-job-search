@@ -76,7 +76,14 @@ export function checkClaude(): Check {
 }
 
 /** The JEV key for the provider in use: TypeSafe's or OpenRouter's (`jevProvider()`). */
-export function checkKey(key?: string, provider: JevProvider | null = jevProvider()): Check {
+export function checkKey(key?: string, given?: JevProvider | null): Check {
+  // An unsupported JEV_PROVIDER is reported here like any other setup problem, not thrown.
+  let provider: JevProvider | null;
+  try {
+    provider = given !== undefined ? given : jevProvider();
+  } catch (err) {
+    return { name: "JEV key", ok: false, detail: err instanceof Error ? err.message : String(err), fix: "Set JEV_PROVIDER in .env to typesafe or openrouter, or leave it empty" };
+  }
   const p = JEV.providers[provider ?? "openrouter"];
   const value = key ?? process.env[p.keyEnv] ?? "";
   const ok = value.trim().length > 0;
@@ -152,9 +159,10 @@ export function checkAccounts(store: SecretStore = defaultStore(), files: { acco
 
 /** One tiny JEV call: proves the key is valid and has credit. */
 export async function checkKeyOnline(): Promise<Check> {
-  const p = JEV.providers[jevProvider() ?? "openrouter"];
-  const fix = `Check the key at ${p.keysUrl} and that the account has credit`;
+  let fix = "Set JEV_PROVIDER in .env to typesafe or openrouter, or leave it empty";
   try {
+    const p = JEV.providers[jevProvider() ?? "openrouter"];
+    fix = `Check the key at ${p.keysUrl} and that the account has credit`;
     const jev = new JevClient({ usageLog: null });
     await jev.decide("The sky is blue.", { ok: noul("Does the text mention a colour?") }, "doctor");
     return { name: "JEV answers", ok: true, detail: `one test call through ${p.name}, $${jev.usage.costUsd.toFixed(6)}`, fix: "" };

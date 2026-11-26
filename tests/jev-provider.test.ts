@@ -38,7 +38,7 @@ describe("which provider JEV is reached through", () => {
     process.env.TYPESAFE_API_KEY = "  ";
     expect(jevProvider()).toBe("openrouter");
   });
-  it("follows JEV_PROVIDER when it names one, and ignores anything else in it", () => {
+  it("follows JEV_PROVIDER when it names one, and rejects unsupported settings", () => {
     process.env.TYPESAFE_API_KEY = "ts";
     process.env.OPENROUTER_API_KEY = "or";
     process.env.JEV_PROVIDER = "openrouter";
@@ -46,7 +46,8 @@ describe("which provider JEV is reached through", () => {
     process.env.JEV_PROVIDER = "typesafe";
     expect(jevProvider()).toBe("typesafe");
     process.env.JEV_PROVIDER = "somewhere-else";
-    expect(jevProvider()).toBe("typesafe");
+    expect(() => jevProvider()).toThrow(/JEV_PROVIDER.*typesafe.*openrouter/);
+    expect(() => new JevClient({ usageLog: null })).toThrow(/JEV_PROVIDER/);
   });
 });
 
@@ -122,5 +123,12 @@ describe("doctor's key check", () => {
     process.env.TYPESAFE_API_KEY = key;
     expect(checkKey().detail).toMatch(/^TypeSafe/);
     expect(checkKey("", null).fix).toMatch(/console\.typesafe\.ai\/keys.*openrouter\.ai\/keys.*Do not paste the key into a chat/);
+  });
+  it("reports an unsupported JEV_PROVIDER as a failed check instead of crashing", () => {
+    process.env.JEV_PROVIDER = "somewhere-else";
+    const c = checkKey();
+    expect(c.ok).toBe(false);
+    expect(c.detail).toMatch(/JEV_PROVIDER/);
+    expect(c.fix).toMatch(/typesafe or openrouter/);
   });
 });
