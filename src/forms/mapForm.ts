@@ -15,7 +15,7 @@ import type { JevClient } from "../jev/client.js";
 import { choice, noul } from "../jev/questions.js";
 import type { Answer, ChoiceAnswer, NoulAnswer, Questions } from "../jev/types.js";
 import { ALL_KEYS, isProfileKey, isSpecialKey, profileFacts, valueFor, type FieldKey } from "../profile/fieldKeys.js";
-import { candidatePreferences, monthName, sponsorshipLater, type Profile } from "../profile/schema.js";
+import { candidatePreferences, monthName, sponsorshipLater, type AgreementKind, type Profile } from "../profile/schema.js";
 import { BANK_INTENTS } from "../answers/bank.js";
 import { countryOfLocations, locationTier } from "../jobs/hardFilters.js";
 import type { Job } from "../jobs/normalize.js";
@@ -90,7 +90,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 15;
+const PLAN_VERSION = 16;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -100,7 +100,6 @@ const NEEDS_PERMIT_Q = /\b(?:require|need)s?\b[^.?]{0,25}\b(?:(?:work|employment
 const SPONSOR_Q = new RegExp(`sponsor|${NEEDS_PERMIT_Q.source}`, "i");
 /** A tick that accepts something: terms, an agreement, a notice. */
 const AGREEMENT_Q = /\b(agree|agreement|acknowledg|consent|terms|privacy|arbitration|attest|certify|accept)/i;
-/** Ticks that say the application is true or that a privacy notice was read: every application needs them. */
 /**
  * The part of a date a box labelled Month, Day or Year takes, as a plain number. Null when the box
  * is not one of those, or the value is not a date. A date that names only a month is its first day.
@@ -118,6 +117,7 @@ const WORKPLACE_Q = /\brelocat|\bon[- ]?site\b|\bin[- ](?:the[- ])?office\b|\bin
 const BOTH_NAMES = /\bfirst\b[^.]{0,12}\blast\b|\bfull name\b/i;
 /** A box that says the person goes by a name other than their legal one. */
 const PREFERRED_NAME_BOX = /\b(i have|i use|i go by)\b[^.]{0,30}\b(preferred|different|another) name\b/i;
+/** Ticks that say the application is true or that a privacy notice was read: every application needs them. */
 const ROUTINE_AGREEMENT = /\b(privacy|true|accurate|correct|complete|information (?:i|provided|above)|data (?:protection|processing))/i;
 
 export type Category = "contact_other" | "authorization" | "sponsorship" | "agreement" | "general";
@@ -157,12 +157,24 @@ export function residenceOf(profile: Profile): string | null {
 export function countryOf(label: string, job: Job, profile: Profile): string | null {
   if (/\bcanad/i.test(label)) return "Canada";
   if (/united states|\bu\.?s\.?a?\.?\b|\bamerica\b/i.test(label)) return "United States";
+  const named = profileCountryIn(label, profile);
+  if (named) return named;
   if (RESIDENCE_Q.test(label)) return residenceOf(profile);
   const tier = locationTier(job.locations);
   if (tier === "vancouver" || tier === "canada") return "Canada";
   if (tier === "us") return "United States";
   // A posting that lists a city and "Remote" is read as remote; the city still says which country.
-  return countryOfLocations(job.locations);
+  return countryOfLocations(job.locations) ?? profileCountryIn(job.locations.join(" | "), profile);
+}
+
+/**
+ * The one country the profile has a work-rights answer for that the text names ("Vienna, Austria").
+ * Null when it names none of them, or more than one, so a posting across countries stays the person's.
+ */
+function profileCountryIn(text: string, profile: Profile): string | null {
+  const known = [...new Set([...profile.workAuthorization.citizenships, ...profile.workAuthorization.authorizedCountries, ...sponsorshipLater(profile)])];
+  const named = known.filter((c) => c.trim() && new RegExp(`\\b${c.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text));
+  return named.length === 1 ? named[0]! : null;
 }
 
 /** Yes or No, when an option plainly says one of them. */
@@ -180,6 +192,20 @@ export function truthFor(category: Category, label: string, profile: Profile, jo
 export const approvesAgreements = (profile: Profile): boolean => profile.answers.some((a) => /agreement|acknowledg|terms|attestation/i.test(a.question) && /\b(i agree|tick)\b/i.test(a.answer));
 
 type Gated = Pick<DumpedField, "label" | "section" | "hint" | "kind">;
+
+/** What would make an acknowledgment more than a notice read or a fact about the work: a right given up, a check agreed to. */
+const BINDING = /\barbitrat|\bwaive|\bclass action|\bnon[- ]?compete|\bbackground check|\bdrug test|\bsignature|\bsign\b/i;
+/** The kinds of acknowledgment the person may approve for every posting (`preferences.acceptedAgreements`). */
+const AGREEMENT_KINDS: Record<AgreementKind, RegExp> = {
+  /** That the applicant privacy policy or data notice was read and accepted. */
+  privacy: /\bprivacy\b|\bdata (?:protection|processing)\b|\bgdpr\b/i,
+  /** Where and how the work is done: on site, in the office, hybrid, a city to move to. */
+  workplace: WORKPLACE_Q,
+};
+
+/** True when the label is a kind of acknowledgment the person approved for every posting, and binds them to nothing more. */
+const acceptedKind = (label: string, profile: Profile) =>
+  !BINDING.test(label) && (profile.preferences.acceptedAgreements ?? []).some((k) => AGREEMENT_KINDS[k].test(label));
 
 /** A value as an approval names it: a ticked box is "checked" however a caller spells it. */
 const approvalValue = (f: Gated, value: string) => {
@@ -200,6 +226,7 @@ export function agreementHold(f: Gated, value: string, profile: Profile, job: Jo
   if (!accepts) return null;
   const label = f.label.trim().replace(/\s+/g, " ");
   if (profile.preferences.approvedAgreements?.some((a) => a.jobId === job.id && a.label.trim().replace(/\s+/g, " ") === label && approvalValue(f, a.value) === approvalValue(f, value))) return null;
+  if (acceptedKind(f.label, profile)) return null;
   if (profile.preferences.reviewAgreements) return "this agreement or acknowledgment needs the candidate's explicit approval";
   if (ROUTINE_AGREEMENT.test(f.label) || approvesAgreements(profile)) return null;
   return "accepting this is yours to decide; a standing answer about agreements lets the tool tick it";
@@ -402,7 +429,7 @@ export async function mapForm(jev: JevClient, profile: Profile, job: Job, dump: 
   const fields = dump.fields.map(({ value: _value, checked: _checked, ...rest }) => rest);
   // A plan made with the profile's resume is not the plan for a run that wants a tailored one, and the other way round.
   // The agreement gate reads the person's approvals for this job and whether agreements wait for review: the plan changes with them.
-  const agreements = { review: !!profile.preferences.reviewAgreements, approved: (profile.preferences.approvedAgreements ?? []).filter((a) => a.jobId === job.id) };
+  const agreements = { review: !!profile.preferences.reviewAgreements, kinds: profile.preferences.acceptedAgreements ?? [], approved: (profile.preferences.approvedAgreements ?? []).filter((a) => a.jobId === job.id) };
   const key = hashOf({ fields, submit: dump.submitSelectors, state: buildFormState(profile, job, { ...dump, url: "" }, []), agreements, form: FORM, documents: documentPolicy(), version: PLAN_VERSION });
   const hit = plans.get(key);
   if (hit) return { ...hit, jobId: job.id, url: dump.url, jevCostUsd: 0 };

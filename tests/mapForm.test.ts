@@ -35,6 +35,16 @@ describe("work authorization per posting country", () => {
     expect(valueForJob(profile, job(["Toronto, ON"]), "authorized_to_work")).toBe("Yes");
     expect(valueForJob(profile, job(["Austin, TX"]), "requires_sponsorship")).toBe("Yes");
   });
+  it("reads a country the profile answers for from the posting or the question", () => {
+    const eu = { ...profile, workAuthorization: { ...profile.workAuthorization, authorizedCountries: [...profile.workAuthorization.authorizedCountries, "Austria", "Germany"] } };
+    const q = "Will you now or in the future require visa sponsorship to work in the location where this job is posted?";
+    expect(valueForJob(eu, job(["Vienna, Austria", "Remote"]), "requires_sponsorship", q)).toBe("No");
+    expect(valueForJob(eu, job(["Remote"]), "requires_sponsorship", "Do you need sponsorship to work in Germany?")).toBe("No");
+    // Two countries, or one the profile says nothing about, stay the person's.
+    expect(valueForJob(eu, job(["Vienna, Austria", "Berlin, Germany"]), "requires_sponsorship", q)).toBeNull();
+    expect(valueForJob(eu, job(["London, United Kingdom"]), "requires_sponsorship", q)).toBeNull();
+    expect(gateAnswer(field({ kind: "radio", label: q }), "Yes", eu, job(["Vienna, Austria", "Remote"]))).toMatch(/does not match the profile/);
+  });
 });
 
 describe("questionsFor", () => {
@@ -410,6 +420,22 @@ it("never holds a question that only mentions terms, or a written answer that us
   const j = job(["Seattle, WA"]);
   expect(gateAnswer(field({ kind: "select", label: "Which work terms are you available for?" }), "Summer 2027", strict, j)).toBeNull();
   expect(gateAnswer(field({ kind: "textarea", label: "Why do you want to join us?" }), "I would accept any team where I can ship code.", strict, j)).toBeNull();
+});
+
+it("lets the kinds of acknowledgment approved for every posting go in, and nothing that binds more", () => {
+  const strict = { ...profile, preferences: { ...profile.preferences, reviewAgreements: true } };
+  const kinds = { ...profile, preferences: { ...strict.preferences, acceptedAgreements: ["privacy", "workplace"] as ("privacy" | "workplace")[] } };
+  const privacy = field({ kind: "radio", label: "I acknowledge that I accept and agree to the applicant privacy policy", required: true });
+  const onSite = field({ kind: "radio", label: "Please acknowledge this is an in office position. Interns are on-site 5 days per week.", required: true });
+  const both = field({ kind: "checkbox", label: "I agree to the privacy policy and to binding arbitration", required: true });
+  const terms = field({ kind: "checkbox", label: "I accept the terms of use", required: true });
+  const j = job(["Seattle, WA"]);
+  expect(gateAnswer(privacy, "I acknowledge", strict, j)).toMatch(/approval/);
+  expect(gateAnswer(onSite, "I acknowledge", strict, j)).toMatch(/approval/);
+  expect(gateAnswer(privacy, "I acknowledge", kinds, j)).toBeNull();
+  expect(gateAnswer(onSite, "I acknowledge", kinds, j)).toBeNull();
+  expect(gateAnswer(both, "true", kinds, j)).toMatch(/approval/);
+  expect(gateAnswer(terms, "true", kinds, j)).toMatch(/approval/);
 });
 
 it("reads an approved tick box the same however its value is spelled", () => {
