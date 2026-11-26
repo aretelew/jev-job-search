@@ -12,7 +12,7 @@ import { capabilityFor } from "./accounts/capability.js";
 import { preFilter } from "./jobs/hardFilters.js";
 import { isWalled, learnedWalledHosts } from "./jobs/walled.js";
 import { dedupe, type Job } from "./jobs/normalize.js";
-import { entryFor, KEPT_ON_REDISCOVERY, loadQueue, mutateQueue, sortEntries, type QueueEntry, type QueueFile, type QueueStatus } from "./jobs/queue.js";
+import { decidedBySearch, entryFor, KEPT_ON_REDISCOVERY, loadQueue, mutateQueue, sortEntries, type QueueEntry, type QueueFile, type QueueStatus } from "./jobs/queue.js";
 import { withStore } from "./util/store.js";
 
 /** Jobs whose earlier rating still stands: a run or a person already settled them. */
@@ -29,6 +29,7 @@ import { fetchGreenhouseBoard } from "./sources/ats/greenhouse.js";
 import { fetchLeverBoard } from "./sources/ats/lever.js";
 import { boardsFromJobs, type Board } from "./sources/companies.js";
 import { fetchReadmeSources } from "./sources/githubReadme.js";
+import { resolveShortLinks } from "./sources/shortLinks.js";
 import { fetchSimplify } from "./sources/simplify.js";
 import { fetchJobsWithPay } from "./sources/jobswithpay.js";
 import { importSheet } from "./sources/sheetImport.js";
@@ -37,8 +38,8 @@ import { mapLimit } from "./util/http.js";
 export const EARLY_CAREER_TITLE = /\b(intern|internship|co-?op|new grad|new graduate|early career|early-career|entry[- ]level|junior|graduate|university|student|campus|associate software|software engineer i\b|engineer i\b|swe i\b)\b/i;
 
 /** A board posting counts as early-career by its title, or by naming the candidate's graduation year. */
-export function isEarlyCareerTitle(title: string, gradYear?: number): boolean {
-  return EARLY_CAREER_TITLE.test(title) || (gradYear !== undefined && new RegExp(`\\b${gradYear}\\b`).test(title));
+export function isEarlyCareerTitle(title: string, years: readonly number[] = []): boolean {
+  return EARLY_CAREER_TITLE.test(title) || years.some((y) => new RegExp(`\\b${y}\\b`).test(title));
 }
 
 export type DiscoverOptions = {
@@ -46,8 +47,8 @@ export type DiscoverOptions = {
   limit?: number;
   log?: (line: string) => void;
   now?: Date;
-  /** The candidate's graduation year: a board title that names it is early-career. */
-  gradYear?: number;
+  /** The years a board title may name to be early-career: the internship year and the graduation year. */
+  years?: number[];
   /** Consider postings up to this many days old, for one search. The default is DISCOVER.maxAgeDays. */
   maxAgeDays?: number;
 };
@@ -68,7 +69,7 @@ export type DiscoverSummary = {
 
 export async function collectJobs(opts: DiscoverOptions = {}): Promise<Job[]> {
   const log = opts.log ?? (() => {});
-  const jobs: Job[] = [];
+  let jobs: Job[] = [];
 
   const [simplify, readmes, jobsWithPay] = await Promise.all([
     fetchSimplify().catch((e) => {
@@ -96,6 +97,11 @@ export async function collectJobs(opts: DiscoverOptions = {}): Promise<Job[]> {
     }
   }
 
+  // A short link hides the posting's own address: resolved first, a job listed twice is one job, and its board is polled.
+  const short = await resolveShortLinks(jobs);
+  if (short.resolved || short.dropped) log(`[sources] ${short.resolved} short links resolved${short.dropped ? `, ${short.dropped} left out until they resolve` : ""}`);
+  jobs = short.jobs;
+
   if (opts.boards !== false) {
     const boards = boardsFromJobs(jobs);
     log(`[sources] polling ${boards.length} company boards`);
@@ -107,7 +113,7 @@ export async function collectJobs(opts: DiscoverOptions = {}): Promise<Job[]> {
     let fromBoards = 0;
     results.forEach((r) => {
       if (!r.ok) return;
-      const early = r.value.filter((j) => isEarlyCareerTitle(j.title, opts.gradYear));
+      const early = r.value.filter((j) => isEarlyCareerTitle(j.title, opts.years));
       fromBoards += early.length;
       jobs.push(...early);
     });
@@ -177,8 +183,8 @@ export async function discover(profile: Profile, jev: JevClient, opts: DiscoverO
   const previous = loadQueue();
   const prevById = new Map(previous.entries.map((e) => [e.job.id, e]));
 
-  const gradYear = profile.education[0]?.gradYear;
-  const all = await collectJobs({ ...opts, ...(gradYear !== undefined ? { gradYear } : {}) });
+  const years = [profile.preferences.internshipYear, profile.education[0]?.gradYear].filter((y): y is number => y !== undefined);
+  const all = await collectJobs({ ...opts, years });
   const learned = learnedWalledHosts();
   const us = usStatus(profile);
   const collected = all.length;
@@ -197,10 +203,11 @@ export async function discover(profile: Profile, jev: JevClient, opts: DiscoverO
   }
   log(`[discover] ${kept.length} pass the code filters, ${decided.length} do not`);
 
-  // Jobs with a terminal status from an earlier run are not re-rated.
+  // A job a run or a person settled keeps its rating. A skip the search decided is rated again, so a
+  // changed question or threshold reaches it; an unchanged posting comes from the ratings cache for free.
   const toRate = kept.filter((j) => {
     const prev = prevById.get(j.id);
-    if (prev && NOT_RERATED.includes(prev.status) && prev.fit) {
+    if (prev && NOT_RERATED.includes(prev.status) && prev.fit && !decidedBySearch(prev)) {
       decided.push({ job: j, fit: prev.fit as FitResult, reason: null });
       return false;
     }

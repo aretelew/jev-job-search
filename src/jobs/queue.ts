@@ -110,9 +110,34 @@ export function loadQueue(file = PATHS.queue): QueueFile {
   const parsed = QueueFile.safeParse(raw);
   if (!parsed.success) throw new Error(`${file} is corrupt: ${parsed.error.message}. The last good copy is ${file}.bak`);
   // An id is derived from the posting, so it is recomputed on load: a queue written by an older
-  // version keeps every status, and an applied job can never come back as a new one.
+  // version keeps every status, and an applied job can never come back as a new one. When the rule
+  // for what makes two links one posting learns something (a short link's target), two entries can
+  // turn out to be one job: they are folded into one that keeps what was decided about it.
   for (const e of parsed.data.entries) e.job.id = jobId(e.job.url);
+  parsed.data.entries = foldSameJob(parsed.data.entries);
   return parsed.data;
+}
+
+/** How settled a status is: an application that may be with the employer first, a plain queued job last. */
+const settled = (s: QueueStatus) => (MAYBE_SENT.includes(s) ? 2 : KEPT_ON_REDISCOVERY.includes(s) ? 1 : 0);
+
+/**
+ * Entries that are one job become one entry: the most settled one, so an applied job is never
+ * offered again, holding every answer any of them was given.
+ */
+export function foldSameJob(entries: QueueEntry[]): QueueEntry[] {
+  const byId = new Map<string, QueueEntry>();
+  for (const e of entries) {
+    const other = byId.get(e.job.id);
+    if (!other) {
+      byId.set(e.job.id, e);
+      continue;
+    }
+    const [keep, drop] = settled(e.status) > settled(other.status) || (settled(e.status) === settled(other.status) && e.updatedAt > other.updatedAt) ? [e, other] : [other, e];
+    const answers = [...keep.answers, ...drop.answers.filter((a) => !keep.answers.some((k) => k.question === a.question))];
+    byId.set(e.job.id, { ...keep, answers });
+  }
+  return [...byId.values()];
 }
 
 /** Replaces the queue file whole, keeping the copy it replaces as queue.json.bak. */
@@ -140,6 +165,15 @@ export function mutateQueue<T>(fn: (q: QueueFile) => T, file = PATHS.queue): T {
   });
 }
 
+/**
+ * True for a skip a search decided (a code filter, the rating, or the score), as opposed to one a run
+ * or a person decided. It is the search's to decide again: the job may be wanted now, or skipped for
+ * another reason, and the reason on the record has to be the one that holds today.
+ */
+export function decidedBySearch(e: QueueEntry): boolean {
+  return e.status === "skipped" && (e.statusReason === e.preFilterReason || e.statusReason === (e.fit?.skipReason ?? null) || /^score .* below threshold$/.test(e.statusReason ?? ""));
+}
+
 export function entryFor(job: Job, fit: FitResult | null, preFilterReason: string | null, previous?: QueueEntry): QueueEntry {
   const now = new Date().toISOString();
   const fresh: QueueEntry = {
@@ -159,11 +193,8 @@ export function entryFor(job: Job, fit: FitResult | null, preFilterReason: strin
     response: null,
   };
   if (!previous) return fresh;
-  // Keep what a run or a person decided, and the history; refresh the job and rating. A skip the search itself
-  // decided is the search's to decide again: the job may be wanted now, or skipped for another reason, and the
-  // reason on the record has to be the one that holds today.
-  const bySearch = previous.status === "skipped" && (previous.statusReason === previous.preFilterReason || previous.statusReason === (previous.fit?.skipReason ?? null) || /^score .* below threshold$/.test(previous.statusReason ?? ""));
-  const keepStatus = KEPT_ON_REDISCOVERY.includes(previous.status) && !bySearch;
+  // Keep what a run or a person decided, and the history; refresh the job and rating.
+  const keepStatus = KEPT_ON_REDISCOVERY.includes(previous.status) && !decidedBySearch(previous);
   return {
     ...fresh,
     status: keepStatus ? previous.status : fresh.status,

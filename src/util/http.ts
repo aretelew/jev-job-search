@@ -39,21 +39,38 @@ export async function getText(url: string, opts: GetOptions = {}): Promise<strin
       /* fall through to a live fetch */
     }
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DISCOVER.fetchTimeoutMs);
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json, text/html;q=0.9, */*;q=0.8", ...opts.headers },
-      signal: controller.signal,
-      redirect: "follow",
-    });
-    const body = await res.text();
+  const body = await timedGet(url, { headers: { Accept: "application/json, text/html;q=0.9, */*;q=0.8", ...opts.headers }, redirect: "follow" }, opts.timeoutMs, async (res) => {
+    const text = await res.text();
     if (!res.ok) throw new HttpError(`GET ${url} returned ${res.status}`, res.status, url);
-    if (cacheFile) {
-      mkdirSync(path.dirname(cacheFile), { recursive: true });
-      writeFileSync(cacheFile, JSON.stringify({ at: Date.now(), body }));
-    }
-    return body;
+    return text;
+  });
+  if (cacheFile) {
+    mkdirSync(path.dirname(cacheFile), { recursive: true });
+    writeFileSync(cacheFile, JSON.stringify({ at: Date.now(), body }));
+  }
+  return body;
+}
+
+/**
+ * Where a link redirects to, without following it or reading the page: the Location header of its
+ * first answer, made absolute. Null when it answers without redirecting. A refusal (4xx, 5xx) is an
+ * HttpError, so "not a redirect" and "not answered now" stay apart.
+ */
+export function getRedirect(url: string, opts: { timeoutMs?: number } = {}): Promise<string | null> {
+  return timedGet(url, { redirect: "manual" }, opts.timeoutMs, async (res) => {
+    await res.body?.cancel();
+    if (res.status >= 400) throw new HttpError(`GET ${url} returned ${res.status}`, res.status, url);
+    const to = res.headers.get("location");
+    return res.status >= 300 && to ? new URL(to, url).toString() : null;
+  });
+}
+
+/** One GET with this tool's user agent. The answer is read inside the same timeout as the request. */
+async function timedGet<T>(url: string, init: { headers?: Record<string, string>; redirect: "follow" | "manual" }, timeoutMs: number | undefined, read: (res: Response) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs ?? DISCOVER.fetchTimeoutMs);
+  try {
+    return await read(await fetch(url, { ...init, headers: { "User-Agent": USER_AGENT, ...init.headers }, signal: controller.signal }));
   } finally {
     clearTimeout(timer);
   }

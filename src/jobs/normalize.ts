@@ -4,6 +4,7 @@
  */
 import { workday } from "../accounts/workday.js";
 import { createHash } from "node:crypto";
+import { knownTarget } from "./shortLinkStore.js";
 
 export type Ats =
   | "greenhouse" | "lever" | "ashby" | "workday" | "icims" | "smartrecruiters" | "jobvite"
@@ -44,6 +45,9 @@ export function hostIs(host: string, domain: string): boolean {
  * the ATS's own posting id; everything else by its canonical URL.
  */
 export function postingKey(raw: string): string {
+  // A short link from a job list is the posting it leads to, once that is known.
+  const target = knownTarget(raw);
+  if (target) return postingKey(target);
   const url = canonicalUrl(raw);
   let host = "";
   try {
@@ -54,6 +58,9 @@ export function postingKey(raw: string): string {
   const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(url)?.[0]?.toLowerCase();
   if (hostIs(host, "ashbyhq.com") && uuid) return `ashby:${uuid}`;
   if (hostIs(host, "lever.co") && uuid) return `lever:${uuid}`;
+  // Workable links one job as /j/CODE and as /company/j/CODE.
+  const workable = hostIs(host, "workable.com") ? /\/j\/([A-Z0-9]{6,})/i.exec(url)?.[1] : undefined;
+  if (workable) return `workable:${workable.toUpperCase()}`;
   const gh = /[?&](?:gh_jid|token)=(\d+)/.exec(url)?.[1] ?? (hostIs(host, "greenhouse.io") ? /\/jobs\/(\d+)/.exec(url)?.[1] : undefined);
   // Greenhouse numbers its EU and US postings separately.
   if (gh) return `greenhouse${hostIs(host, "eu.greenhouse.io") ? "-eu" : ""}:${gh}`;

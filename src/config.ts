@@ -35,6 +35,8 @@ export const PATHS = {
   walledHosts: path.join(ROOT, "data", "cache", "walled-hosts.json"),
   /** JEV's ratings of postings, kept so an unchanged posting is not rated again. */
   ratings: path.join(ROOT, "data", "cache", "ratings.json"),
+  /** Where each list-site short link was found to lead, so it is looked up once. */
+  shortLinks: path.join(ROOT, "data", "cache", "shortlinks.json"),
   /** JEV's field mappings of forms, kept so an unchanged form is not mapped again. */
   plans: path.join(ROOT, "data", "cache", "plans.json"),
   /** Jobs the tool could not finish and left for the person, with the reason and the link. */
@@ -135,6 +137,15 @@ export const JEV = {
 } as const;
 
 export const DISCOVER = {
+  /**
+   * How sure the rater must be that a posting meets the profile's mandatory search conditions
+   * (preferences.searchRequirements). The question counts only a contradiction against a posting,
+   * never missing detail. Measured on an audit of 355 skipped jobs: 0.85 kept 0 of 125 wanted
+   * jobs, 0.5 keeps 115 and lets 8 unwanted ones through, most of which other rules catch.
+   */
+  searchMatchConfidence: 0.5,
+  /** The rater's "is this a software role" confidence below which a job is skipped as not software. */
+  softwareRoleMin: 0.5,
   /** Only postings this fresh are considered. */
   maxAgeDays: 14,
   /** Concurrency for description fetches. */
@@ -150,13 +161,23 @@ export const DISCOVER = {
    * degree, pay, level) are skips, not scores, so this only trims the long
    * tail of weak matches. The queue is ranked, so the best apply first.
    */
-  applyThreshold: 0.3,
+  applyThreshold: 0.25,
   /**
    * Careers sites known to need an account or a login before the form, by hostname fragment.
    * Jobs there are skipped before rating. Sites the apply run finds walled are remembered in
    * data/cache/walled-hosts.json and skipped the same way next time.
    */
   accountWalledHosts: ["eightfold.ai", "careers.microsoft.com", "jobs.intuit.com", "jobs.ea.com"],
+  /**
+   * Hosts of link shorteners some job lists use instead of the posting's own address. Each such link is
+   * resolved to where it leads before jobs are compared, so a posting listed twice is one job and its real
+   * job board is known.
+   */
+  shortLinkHosts: ["go.vansh.nyc"],
+  /** The pause between two lookups on one shortener. A first search resolves every link once; later ones only new links. */
+  shortLinkGapMs: 200,
+  /** The most redirects followed for one link, so a shortener that points at another still resolves. */
+  shortLinkMaxHops: 3,
   /** Job boards whose forms the page scripts cannot read yet. Their jobs are skipped with that reason. */
   unreadableAts: ["smartrecruiters"],
   /** Sources that are read from GitHub. Each entry names the raw file and its parser. */
@@ -254,6 +275,8 @@ export const CACHE = {
   plans: true,
   /** The most form mappings kept. Each is a few kilobytes. */
   maxPlans: 400,
+  /** Short links remembered with where they lead. A job keeps its identity only while its link is remembered. */
+  maxShortLinks: 50_000,
 } as const;
 
 /**
@@ -549,6 +572,8 @@ export const STORE = {
 /** The dashboard: a page on your own machine that reads the records and lets you change a status by hand. */
 export const REPORT = {
   port: 4545,
+  /** How many days the overview's chart of applications covers. */
+  chartDays: 14,
   /** The statuses the page lets a person set, in the order they are offered. */
   statuses: ["applied", "needs_review", "queued", "skipped", "blocked", "failed"],
 } as const;
@@ -561,6 +586,7 @@ export const REPORT = {
 export function jevProvider(): JevProvider | null {
   const asked = (process.env.JEV_PROVIDER ?? "").trim();
   if (asked === "typesafe" || asked === "openrouter") return asked;
+  if (asked) throw new Error("Unsupported JEV_PROVIDER in .env. It can be typesafe, openrouter, or empty.");
   if (process.env.TYPESAFE_API_KEY?.trim()) return "typesafe";
   if (process.env.OPENROUTER_API_KEY?.trim()) return "openrouter";
   return null;
