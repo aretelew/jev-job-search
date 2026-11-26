@@ -27,10 +27,23 @@ export function limiter(n: number): <T>(work: () => Promise<T>) => Promise<T> {
 /** One piece of work at a time per key, with a pause after each before the next for the same key starts. Other keys are not held up. */
 export function spacer(gapMs: number | ((key: string) => number)): <T>(key: string, work: () => Promise<T>) => Promise<T> {
   const turns = new Map<string, Promise<unknown>>();
+  // When each key's last piece of work ended. The pause is waited out by the next piece of work, when
+  // one comes: a timer started after the last one would hold the process open for the whole pause.
+  const ended = new Map<string, number>();
   const gap = (key: string) => (typeof gapMs === "number" ? gapMs : gapMs(key));
   return (key, work) => {
-    const run = (turns.get(key) ?? Promise.resolve()).then(work);
-    turns.set(key, run.then(() => sleep(gap(key)), () => sleep(gap(key))));
+    const run = (turns.get(key) ?? Promise.resolve()).then(async () => {
+      const last = ended.get(key);
+      // Never more than one whole pause, even if the clock was set back since the last one ended.
+      const wait = last === undefined ? 0 : Math.min(gap(key), last + gap(key) - Date.now());
+      if (wait > 0) await sleep(wait);
+      try {
+        return await work();
+      } finally {
+        ended.set(key, Date.now());
+      }
+    });
+    turns.set(key, run.catch(() => undefined));
     return run;
   };
 }

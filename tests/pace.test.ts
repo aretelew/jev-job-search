@@ -46,6 +46,40 @@ describe("spacer", () => {
     await all;
     vi.useRealTimers();
   });
+  it("leaves no timer behind after the last piece of work, so a command can exit the moment it is done", async () => {
+    vi.useFakeTimers();
+    const spaced = spacer(8 * 60_000);
+    await spaced("lucid", async () => "sent");
+    // The pause is owed only to a next submission. Nothing is waiting for one, so nothing may hold the process open.
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+  });
+  it("waits only for what is left of the pause when the next piece of work comes later", async () => {
+    vi.useFakeTimers();
+    const spaced = spacer(1000);
+    const started: number[] = [];
+    await spaced("a.com", async () => started.push(Date.now()));
+    await vi.advanceTimersByTimeAsync(600);
+    const next = spaced("a.com", async () => started.push(Date.now()));
+    await vi.advanceTimersByTimeAsync(399);
+    expect(started).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await next;
+    expect((started[1] as number) - (started[0] as number)).toBe(1000);
+    vi.useRealTimers();
+  });
+  it("never waits longer than one pause, even when the clock is set back", async () => {
+    vi.useFakeTimers();
+    const spaced = spacer(1000);
+    await spaced("a.com", async () => "one");
+    vi.setSystemTime(Date.now() - 3_600_000);
+    let ran = false;
+    const next = spaced("a.com", async () => void (ran = true));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(ran).toBe(true);
+    await next;
+    vi.useRealTimers();
+  });
   it("still lets the next one run when the one before it failed", async () => {
     const spaced = spacer(1);
     await expect(spaced("a.com", async () => Promise.reject(new Error("no")))).rejects.toThrow("no");
