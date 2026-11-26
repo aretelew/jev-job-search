@@ -172,7 +172,11 @@ doctor` says what is in place and what to do next.
 
 ## Conventions
 
-- TypeScript, strict, ESM, Node 22, run with `tsx`. No build step.
+- TypeScript, strict, ESM, Node 22, run with `tsx`. No build step. The one
+  exception is the dashboard page: `web/` (React, shadcn) is built into
+  `src/report/web/index.html`, which is committed, so running the tool
+  still builds nothing. After changing `web/`, run `npm run build` there
+  and commit the built file with the change.
 - macOS, Linux and Windows. What differs between them is in
   `src/util/platform.ts`, the secret stores and the scheduler, each with the
   system's command injected so a test can stand in for it. CI runs the tests

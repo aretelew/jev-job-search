@@ -8,14 +8,19 @@ import { z } from "zod";
 import { DAILY, DISCOVER, PATHS } from "../config.js";
 import type { QueueEntry } from "../jobs/queue.js";
 
+/** Where a job may be: the location tiers the rating gives. */
+export const Where = z.enum(["vancouver", "canada", "remote", "us", "international", "unclear"]);
+/** Which kinds of job. */
+export const Level = z.enum(["internship", "new_grad"]);
+
 export const Policy = z.object({
   version: z.literal(1).default(1),
   /** Applications a day. */
   target: z.number().int().min(1).max(DAILY.maxTarget).default(DAILY.target),
   /** Where a job may be: vancouver, canada, remote, us, international, unclear. Empty means anywhere the search kept. */
-  where: z.array(z.enum(["vancouver", "canada", "remote", "us", "international", "unclear"])).default([]),
+  where: z.array(Where).default([]),
   /** Which kinds of job: internship, new_grad. Empty means both. */
-  levels: z.array(z.enum(["internship", "new_grad"])).default([]),
+  levels: z.array(Level).default([]),
   /** The lowest fit score a job may have. */
   minScore: z.number().min(0).max(1).default(DISCOVER.applyThreshold),
   /** Which job boards, by the name in the queue: greenhouse, lever, ashby, workday and so on. Empty means every board the tool fills. */

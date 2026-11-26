@@ -12,7 +12,7 @@ import { loadQueue, mutateQueue, Response as ReplyKind, RUN_OWNED, updateEntry }
 import { loadRows, saveRows, upsertEntry } from "../log/csv.js";
 import { loadDaily, localDay, requestStop, stopRequested } from "../run/daily.js";
 import { settleReview } from "../run/inbox.js";
-import { loadPolicy, Policy } from "../run/policy.js";
+import { Level, loadPolicy, Policy, Where } from "../run/policy.js";
 import { installSchedule, nextRun, removeSchedule, scheduleStatus } from "../run/schedule.js";
 import { currentRun, withStore, writeAtomic } from "../util/store.js";
 import { buildReport, StatusChange } from "./data.js";
@@ -55,6 +55,12 @@ export function automation(now = new Date()) {
     policy,
     policyError,
     defaults: Policy.parse({}),
+    /** Everything the rules may pick from: the page offers exactly these, so no saved choice is ever hidden. */
+    choices: {
+      where: Where.options,
+      levels: Level.options,
+      boards: [...new Set([...loadQueue().entries.map((e) => e.job.ats).filter((a) => a !== "other"), ...(policy?.boards ?? [])])].sort(),
+    },
     limits: { maxTarget: DAILY.maxTarget, perBoard: DAILY.perBoard, perEmployerPerDay: DAILY.perEmployerPerDay, gapMinutes: DAILY.gapMs.map((ms) => ms / 60_000), maxMinutes: DAILY.maxMinutes },
     schedule: { on: schedule.installed && schedule.loaded, at: schedule.at ?? DAILY.at, next: schedule.installed && schedule.at ? (nextRun(schedule.at, now)?.toISOString() ?? null) : null },
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -115,7 +121,7 @@ export function startReportServer(port: number = REPORT.port): Promise<string> {
       if (!fromThisPage(req, port)) return send(res, 403, "text/plain", "forbidden");
       if (req.method === "GET") {
         if (url.pathname === "/") return send(res, 200, "text/html; charset=utf-8", reportPage(null, token));
-        if (url.pathname === "/api/data") return json(res, { ...buildReport(loadRows()), run: currentRun() });
+        if (url.pathname === "/api/data") return json(res, { ...buildReport(loadRows(), loadQueue().entries) });
         if (url.pathname === "/api/needs") return json(res, buildNeeds(loadQueue().entries));
         if (url.pathname === "/api/automation") return json(res, automation());
         return send(res, 404, "text/plain", "not found");
@@ -175,7 +181,9 @@ export function startReportServer(port: number = REPORT.port): Promise<string> {
       if (url.pathname === "/api/mail") {
         const p = MailAnswer.safeParse(body);
         if (!p.success) return bad(p.error);
-        return json(res, { ok: settleReview(p.data.id, p.data.jobId && p.data.kind ? { jobId: p.data.jobId, kind: p.data.kind } : null) });
+        // An email already sorted (another tab, a second click, /inbox) is said so, never reported as saved.
+        if (!settleReview(p.data.id, p.data.jobId && p.data.kind ? { jobId: p.data.jobId, kind: p.data.kind } : null)) return json(res, { error: "That email is no longer waiting to be sorted. Reload the page." }, 409);
+        return json(res, { ok: true });
       }
       send(res, 404, "text/plain", "not found");
     } catch (err) {

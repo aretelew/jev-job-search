@@ -8,46 +8,43 @@ import { QueueStatus } from "../jobs/queue.js";
 import { statusKeyOf, takehomeRecords, toRecord, type Row } from "../log/csv.js";
 
 /** One job as the page shows it. status_key is the status itself; status is the words in the record. */
-export type ReportRow = ReturnType<typeof toRecord> & { takehome_link: string; status_key: string };
+export type ReportRow = ReturnType<typeof toRecord> & { takehome_link: string; status_key: string; posted_on: string };
 
 export type Report = {
   rows: ReportRow[];
-  totals: { applied: number; appliedToday: number; unconfirmed: number; waitingForYou: number; leftForYou: number; queued: number; skipped: number; considered: number };
-  byStatus: Record<string, number>;
-  byBoard: Record<string, number>;
-  byDay: { day: string; applied: number }[];
+  totals: { applied: number; appliedToday: number; replies: number; leftForYou: number; queued: number; considered: number };
+  /** Applications sent on each of the last REPORT.chartDays days, oldest first, with the days nothing was sent. */
+  recentDays: { day: string; applied: number }[];
   generatedAt: string;
 };
 
-export function buildReport(rows: Row[], today = new Date()): Report {
+/** A date as YYYY-MM-DD in this machine's own time zone. */
+const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** The page's rows and totals, from the records and the queue. The queue gives the day each job was posted. */
+export function buildReport(rows: Row[], entries: readonly { job: { id: string; postedAt: string | null } }[], today = new Date()): Report {
+  const posted = new Map(entries.flatMap((e) => (e.job.postedAt ? [[e.job.id, e.job.postedAt.slice(0, 10)] as [string, string]] : [])));
   const takehome = new Map(takehomeRecords(rows).map((t) => [t.job_id, t.takehome_link]));
-  const all = rows.map((r) => ({ ...toRecord(r), takehome_link: takehome.get(r["Job ID"]) ?? "", status_key: statusKeyOf(r["App. Status"]) ?? "" }));
-  const day = (iso: string) => iso.slice(0, 10);
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const all = rows.map((r) => ({ ...toRecord(r), takehome_link: takehome.get(r["Job ID"]) ?? "", status_key: statusKeyOf(r["App. Status"]) ?? "", posted_on: posted.get(r["Job ID"]) ?? "" }));
   const count = (f: (r: ReportRow) => boolean) => all.filter(f).length;
-  const tally = (key: (r: ReportRow) => string, only?: (r: ReportRow) => boolean) => {
-    const out: Record<string, number> = {};
-    for (const r of all) if (!only || only(r)) out[key(r)] = (out[key(r)] ?? 0) + 1;
-    return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]));
-  };
   const applied = all.filter((r) => r.status_key === "applied");
-  const days: Record<string, number> = {};
-  for (const r of applied) if (r.applied_on) days[day(r.applied_on)] = (days[day(r.applied_on)] ?? 0) + 1;
+  const perDay = new Map<string, number>();
+  for (const r of applied) if (r.applied_on) perDay.set(r.applied_on.slice(0, 10), (perDay.get(r.applied_on.slice(0, 10)) ?? 0) + 1);
+  const recentDays = Array.from({ length: REPORT.chartDays }, (_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (REPORT.chartDays - 1 - i));
+    return { day: localDay(d), applied: perDay.get(localDay(d)) ?? 0 };
+  });
   return {
     rows: all,
     totals: {
       applied: applied.length,
-      appliedToday: applied.filter((r) => day(r.applied_on) === todayKey).length,
-      unconfirmed: count((r) => r.status_key === "submission_unknown"),
-      waitingForYou: count((r) => r.status_key === "awaiting_user_action" || r.status_key === "awaiting_email_verification"),
+      appliedToday: perDay.get(localDay(today)) ?? 0,
+      replies: count((r) => !!r.response),
       leftForYou: count((r) => LEFT_FOR_YOU.includes(r.status_key)),
       queued: count((r) => r.status_key === "queued"),
-      skipped: count((r) => r.status_key === "skipped"),
       considered: all.length,
     },
-    byStatus: tally((r) => r.status.replace(/:.*$/, "")),
-    byBoard: tally((r) => r.ats || "other", (r) => r.status_key === "applied"),
-    byDay: Object.entries(days).sort(([a], [b]) => a.localeCompare(b)).map(([d, n]) => ({ day: d, applied: n })),
+    recentDays,
     generatedAt: new Date().toISOString(),
   };
 }

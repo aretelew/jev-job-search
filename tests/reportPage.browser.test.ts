@@ -15,7 +15,8 @@ import { BROWSER, childEnv, DAILY } from "../src/config.js";
 import { buildReport } from "../src/report/data.js";
 import type { Needs } from "../src/report/needs.js";
 import { reportPage } from "../src/report/page.js";
-import { Policy } from "../src/run/policy.js";
+import { Level, Policy, Where } from "../src/run/policy.js";
+import type { automation as automationOf } from "../src/report/server.js";
 
 const TOKEN = "made-up-token-for-the-test";
 const needs: Needs = {
@@ -36,7 +37,7 @@ const needs: Needs = {
   unconfirmed: [{ id: "u1", company: "Initech", title: "New Grad Engineer", link: "https://jobs.example.com/initech/2" }],
   mail: [{ id: "m1", from: "Hooli Careers", subject: "An update on your application", on: "2026-10-03", kind: null, why: "the tool could not tell what it says", jobs: [{ id: "h1", company: "Hooli", title: "SWE Intern" }] }],
 };
-const automation = { running: true, stopAsked: false, policy: null, policyError: "", defaults: Policy.parse({}), limits: { maxTarget: DAILY.maxTarget, perBoard: DAILY.perBoard, perEmployerPerDay: DAILY.perEmployerPerDay, gapMinutes: [3, 6], maxMinutes: DAILY.maxMinutes }, schedule: { on: false, at: "09:00", next: null }, timezone: "America/Vancouver", today: [] };
+const automation: ReturnType<typeof automationOf> = { running: true, stopAsked: false, policy: null, policyError: "", defaults: Policy.parse({}), choices: { where: Where.options, levels: Level.options, boards: ["ashby", "greenhouse"] }, limits: { maxTarget: DAILY.maxTarget, perBoard: DAILY.perBoard, perEmployerPerDay: DAILY.perEmployerPerDay, gapMinutes: [3, 6], maxMinutes: DAILY.maxMinutes }, schedule: { on: false, at: "09:00", next: null }, timezone: "America/Vancouver", today: [] };
 
 describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real browser", () => {
   let chrome: ChildProcess;
@@ -59,7 +60,7 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
         return;
       }
       if (req.url === "/") return send(reportPage(null, TOKEN), "text/html; charset=utf-8");
-      if (req.url === "/api/data") return send(JSON.stringify({ ...buildReport([]), run: null }));
+      if (req.url === "/api/data") return send(JSON.stringify(buildReport([], [])));
       if (req.url === "/api/needs") return send(JSON.stringify(needs));
       if (req.url === "/api/automation") return send(JSON.stringify(automation));
       res.writeHead(404).end();
@@ -74,7 +75,7 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
       });
     });
     profile = mkdtempSync(path.join(tmpdir(), "jev-chrome-"));
-    chrome = spawn(BROWSER.chromePath, ["--headless=new", `--remote-debugging-port=${port}`, "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore", env: childEnv() });
+    chrome = spawn(BROWSER.chromePath, ["--headless=new", "--window-size=1280,900", `--remote-debugging-port=${port}`, "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore", env: childEnv() });
     for (let i = 0; i < 80; i++) {
       if (await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)) return;
       await sleep(250);
@@ -95,12 +96,20 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
     const errors: string[] = [];
     page.on("Runtime.exceptionThrown", (p) => void errors.push(JSON.stringify(p).slice(0, 300)));
     await page.navigate(origin);
-    for (let i = 0; i < 40 && !(await page.evaluate<boolean>("!!document.querySelector('#nav button')").catch(() => false)); i++) await sleep(150);
+    for (let i = 0; i < 40 && !(await page.evaluate<boolean>("!!document.querySelector('#nav [data-screen]')").catch(() => false)); i++) await sleep(150);
     expect(errors).toEqual([]);
-    const nav = await page.evaluate<string[]>("[...document.querySelectorAll('#nav button')].map((b) => b.textContent)");
-    expect(nav).toEqual(["Today", "Needs you (4)", "Applications", "Automation"]);
+    const nav = await page.evaluate<string[]>("[...document.querySelectorAll('#nav [data-screen]')].map((b) => b.textContent)");
+    expect(nav).toEqual(["Overview", "Needs you", "Applications", "Daily run"]);
+    expect(await page.evaluate<string>("document.querySelector('#nav').innerText")).toMatch(/Needs you\s*4/);
+    // React reads a value only from the element's own setter followed by the event it listens for.
+    const setValue = (selector: string, value: string, event = "input") =>
+      page.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); const proto = Object.getPrototypeOf(el); Object.getOwnPropertyDescriptor(proto, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event(${JSON.stringify(event)}, { bubbles: true })); })()`);
+    const click = async (selector: string) => {
+      await page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+      await sleep(150);
+    };
 
-    await page.evaluate("document.querySelector('[data-screen=needs]').click()");
+    await click("[data-screen=needs]");
     const text = await page.evaluate<string>("document.querySelector('#s-needs').innerText");
     expect(text).toMatch(/Acme needs 2 answers/);
     expect(text).toMatch(/Globex: type the code the board emailed you/);
@@ -110,18 +119,23 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
     expect(await page.evaluate<number>("document.querySelectorAll('[data-job=q1] [data-q]').length")).toBe(1);
     expect(await page.evaluate<number>("document.querySelectorAll('[data-job=q1] [data-keep]').length")).toBe(1);
 
-    await page.evaluate("(() => { const s = document.querySelector('[data-job=q1] select[data-q]'); s.value = 'Platform'; document.querySelector('[data-job=q1] [data-keep]').checked = true; document.querySelector('[data-answer=q1]').click(); })()");
+    await setValue("[data-job=q1] select[data-q]", "Platform", "change");
+    await click("[data-job=q1] [data-keep]");
+    await click("[data-answer=q1]");
     for (let i = 0; i < 30 && !posts.length; i++) await sleep(100);
     expect(posts[0]).toEqual({ path: "/api/answer", token: TOKEN, body: { id: "q1", answers: [{ question: "Which team interests you most?", answer: "Platform", remember: true }] } });
 
-    await page.evaluate("document.querySelector('[data-screen=auto]').click()");
-    const auto = await page.evaluate<string>("document.querySelector('#s-auto').innerText");
+    await click("[data-screen=daily]");
+    const auto = await page.evaluate<string>("document.querySelector('#s-daily').innerText");
     expect(auto).toMatch(/Apply automatically/);
-    expect(auto).toMatch(/Save your daily rules below first/);
-    expect(auto).toMatch(/Your Mac has to be on/);
+    expect(auto).toMatch(/Save your daily rules first/);
+    expect(auto).toMatch(/Your computer has to be on/);
     // The switch cannot be turned on before there are rules.
     expect(await page.evaluate<boolean>("document.querySelector('#autoOn').disabled")).toBe(true);
-    await page.evaluate("(() => { document.querySelector('#pTarget').value = '7'; document.querySelector('#pExclude').value = 'Acme, Globex'; document.querySelector('#pSave').click(); })()");
+    await setValue("#pTarget", "7");
+    await setValue("#pExclude", "Acme, Globex");
+    await sleep(100);
+    await click("#pSave");
     for (let i = 0; i < 30 && posts.length < 2; i++) await sleep(100);
     expect(posts[1]).toMatchObject({ path: "/api/policy", token: TOKEN, body: { target: 7, excludeEmployers: ["Acme", "Globex"], where: [], documents: { tailor: false, cover: false } } });
     expect(Policy.safeParse(posts[1]?.body).success).toBe(true);
@@ -131,11 +145,12 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
     // A run that is working can be asked to stop, apart from pausing the schedule.
     expect(auto).toMatch(/A run is working now/);
     expect(auto).toMatch(/JEV only/);
-    await page.evaluate("document.querySelector('#autoStop').click()");
+    await click("#autoStop");
     for (let i = 0; i < 30 && posts.length < 3; i++) await sleep(100);
     expect(posts[2]).toMatchObject({ path: "/api/stop", token: TOKEN });
     // A status set from the page carries the status the page was showing.
-    await page.evaluate("(() => { document.querySelector('[data-screen=needs]').click(); document.querySelector('[data-set=u1][data-to=applied]').click(); })()");
+    await click("[data-screen=needs]");
+    await click("[data-set=u1][data-to=applied]");
     for (let i = 0; i < 30 && posts.length < 4; i++) await sleep(100);
     expect(posts[3]).toEqual({ path: "/api/status", token: TOKEN, body: { id: "u1", status: "applied", was: "submission_unknown" } });
     expect(errors).toEqual([]);

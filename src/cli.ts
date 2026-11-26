@@ -311,7 +311,7 @@ program
   .option("--static <file>", "write a self-contained snapshot page to this file and exit")
   .action(async (o: { port: number; open?: boolean; static?: string }) => {
     if (o.static) {
-      writeFileSync(o.static, reportPage(buildReport(loadRows())));
+      writeFileSync(o.static, reportPage(buildReport(loadRows(), loadQueue().entries)));
       console.log(`Wrote ${o.static}`);
       if (o.open) openExternal(o.static);
       return;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { REPORT } from "../src/config.js";
 import { buildReport, StatusChange } from "../src/report/data.js";
 import { reportPage } from "../src/report/page.js";
 import { emptyRow, type Row } from "../src/log/csv.js";
@@ -16,14 +17,20 @@ describe("the dashboard's numbers", () => {
     row({ "App. Status": "Queued", "Job ID": "a5" }),
   ];
   it("counts what was sent, what waits, and what is left", () => {
-    const r = buildReport(rows, new Date(2026, 9, 2));
-    expect(r.totals).toEqual({ applied: 2, appliedToday: 1, unconfirmed: 1, waitingForYou: 1, leftForYou: 3, queued: 1, skipped: 1, considered: 7 });
-    expect(r.byBoard).toEqual({ ashby: 1, lever: 1 });
-    expect(r.byDay).toEqual([{ day: "2026-10-01", applied: 1 }, { day: "2026-10-02", applied: 1 }]);
+    const r = buildReport(rows, [], new Date(2026, 9, 2));
+    expect(r.totals).toEqual({ applied: 2, appliedToday: 1, replies: 0, leftForYou: 3, queued: 1, considered: 7 });
+    // The chart's days run up to today, with the days nothing was sent.
+    expect(r.recentDays).toHaveLength(REPORT.chartDays);
+    expect(r.recentDays.slice(-3)).toEqual([{ day: "2026-09-30", applied: 0 }, { day: "2026-10-01", applied: 1 }, { day: "2026-10-02", applied: 1 }]);
     expect(r.rows.find((x) => x.job_id === "a2")?.takehome_link).toBe("https://t/1");
   });
+  it("gives each job the day it was posted, from the queue, and nothing for a job without one", () => {
+    const r = buildReport(rows, [{ job: { id: "a1", postedAt: "2026-09-30T12:00:00Z" } }, { job: { id: "a2", postedAt: null } }], new Date(2026, 9, 2));
+    expect(r.rows.find((x) => x.job_id === "a1")?.posted_on).toBe("2026-09-30");
+    expect(r.rows.find((x) => x.job_id === "a2")?.posted_on).toBe("");
+  });
   it("renders a snapshot page with the data embedded and escaped", () => {
-    const html = reportPage(buildReport([row({ "App. Status": "Applied", Company: "<script>" })]));
+    const html = reportPage(buildReport([row({ "App. Status": "Applied", Company: "<script>" })], []));
     expect(html).toContain('id="data"');
     expect(html).not.toContain("<script>\"");
     expect(html).toContain("\\u003cscript>");

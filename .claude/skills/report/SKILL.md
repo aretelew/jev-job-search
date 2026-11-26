@@ -17,8 +17,9 @@ It starts a page on the user's own machine (`http://127.0.0.1:4545`) and
 opens it. Nothing leaves the machine. The command keeps running until they
 press Ctrl-C. The page has four screens:
 
-- **Today.** One line (sent today, waiting, ready to apply to), the
-  totals, and three small charts.
+- **Overview.** One line (sent today, waiting, ready to apply to), four
+  numbers (sent, replies, needs you, ready to apply), applications over
+  the last 14 days, and the most recent ones.
 - **Needs you.** Everything only they can do, each with its button:
   - a question a form asked that their profile could not answer. They
     type or pick the answer and press "Save for next run". Nothing is
@@ -34,14 +35,15 @@ press Ctrl-C. The page has four screens:
     not sent".
   - an email the tool could not place: they pick the application and what
     it says.
-- **Applications.** Every job, with tabs, a filter, a status select, a
-  notes box, and the reply that came back.
-- **Automation.** The daily run: an "Apply automatically" switch with a
-  time, the next run, "Pause future runs" (removes the schedule),
-  "Stop it after this application" while a run is working, their daily
-  rules as a form, and today's result in one line. Turning the switch on installs the schedule;
+- **Applications.** Every job, with tabs (Applied, Needs you, Queued,
+  Skipped, All), a search box and the reply that came back. Clicking a
+  row opens its details at the side, with the status and the notes.
+- **Daily run.** A "Run every day" switch with a time (turning it off
+  removes the schedule), the next run, "Stop after this application"
+  while a run is working, today's result in one line, and their daily
+  rules as a form. Turning the switch on installs the schedule;
   that is their click, not yours.
 
 `npx jev report --static applications/report.html` writes a snapshot page
-with Today and Applications only, for keeping or sending. Nothing can be
+with Overview and Applications only, for keeping or sending. Nothing can be
 changed from a snapshot.
