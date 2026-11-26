@@ -189,6 +189,17 @@ to have sent the application, the job is recorded as applied. In a
 rehearsal the button is clicked only when JEV agrees that the form goes on.
 `RUN.maxPages` bounds the walk.
 
+### The board's own reading of the resume
+
+Many boards read the resume when it is attached and write what they find
+into the form. Their reading is often wrong: the top entry of the resume
+becomes "Current company" when that job has ended. The runner attaches the
+resume first, then types every value the plan has over what the board wrote,
+then empties every text box the plan leaves empty that now holds something
+(`boxesToEmpty`), on every board. What is left on the page is only what the
+profile says, and it is read back like any other value. A file box that is
+only an autofill helper ("Autofill from resume") is never given the resume.
+
 ### Verification, in layers
 
 1. Every fill is read back from the control. Empty means one retry with real

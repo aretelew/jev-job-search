@@ -9,7 +9,7 @@ import { monthName, sponsorshipLater, type Profile } from "./schema.js";
 export const SPECIAL_KEYS = {
   resume_upload: "A file input for the resume or CV",
   free_text: "An open question that needs a written answer in the candidate's words (why this company, describe a project, anything a bank answer does not cover)",
-  leave_blank: "Optional and not applicable: cover letter, salary expectation, references, middle name, second phone, address line 2, anything about a current employer the candidate does not have",
+  leave_blank: "Optional and not applicable: cover letter, salary expectation, references, middle name, second phone, address line 2",
   unknown: "The label does not match any key and it is not clearly optional",
 } as const;
 
@@ -60,8 +60,10 @@ export const PROFILE_KEYS = {
   disability_status: "Disability status",
   sexual_orientation: "Sexual orientation",
   transgender: "Transgender identity question",
-  current_company: "Current or most recent employer",
-  current_title: "Current or most recent job title",
+  current_company: "Where the candidate works now: current company, current employer, current organization. Chosen even when the candidate has no current job",
+  current_title: "The candidate's job title now: current title, current position, current role. Chosen even when the candidate has no current job",
+  most_recent_company: "Most recent, last or previous employer, or the company of one entry in a work history or employment section. Never a field that asks for the current company",
+  most_recent_title: "Job title at the most recent, last or previous employer, or the title of one entry in a work history or employment section. Never a field that asks for the current title",
   years_of_experience: "Total years of professional experience",
   skills: "Technical skills or technologies, comma separated",
   spoken_languages: "Languages spoken",
@@ -99,7 +101,6 @@ export function isSpecialKey(key: string): key is SpecialKey {
 export function valueFor(profile: Profile, key: ProfileKey): string | null {
   const edu = profile.education[0];
   if (!edu) throw new Error("profile.education must have at least one entry");
-  const job = profile.experience[0];
   const yes = (v: "yes" | "no" | "decline") => (v === "yes" ? "Yes" : v === "no" ? "No" : "I do not wish to answer");
   switch (key) {
     case "first_name": return profile.name.first;
@@ -153,8 +154,10 @@ export function valueFor(profile: Profile, key: ProfileKey): string | null {
     case "disability_status": return yes(profile.demographics.disability);
     case "sexual_orientation": return profile.demographics.sexualOrientation;
     case "transgender": return yes(profile.demographics.transgender);
-    case "current_company": return job?.company ?? null;
-    case "current_title": return job?.title ?? null;
+    case "current_company": return currentJob(profile)?.company ?? null;
+    case "current_title": return currentJob(profile)?.title ?? null;
+    case "most_recent_company": return mostRecentJob(profile)?.company ?? null;
+    case "most_recent_title": return mostRecentJob(profile)?.title ?? null;
     case "years_of_experience": return String(yearsOfExperience(profile));
     case "skills": return [...profile.skills.languages, ...profile.skills.frameworks, ...profile.skills.tools].join(", ");
     case "spoken_languages": return profile.spokenLanguages.map((l) => `${l.name} (${l.level})`).join(", ");
@@ -175,10 +178,46 @@ export function valueFor(profile: Profile, key: ProfileKey): string | null {
   }
 }
 
-/** Whole years of experience across internships and founder roles, rounded down, minimum 0. */
+/**
+ * What a box takes only because it will not submit empty, for a key the profile deliberately leaves
+ * without a value: the GPA the person did not volunteer, and, with no current job, the school and
+ * "Student" for the current employer and title. Null when nothing true can be given.
+ */
+export function valueIfRequired(profile: Profile, key: ProfileKey): { value: string; why: string } | null {
+  const edu = profile.education[0];
+  switch (key) {
+    case "gpa": {
+      const g = edu?.gpa?.cumulative;
+      return g === undefined ? null : { value: g.toFixed(2), why: "GPA given only because the field is required" };
+    }
+    case "current_company":
+    case "current_title":
+      if (currentJob(profile) || edu?.status !== "in_progress") return null;
+      return { value: key === "current_company" ? edu.school : "Student", why: "no current job, so the school is given because the field is required" };
+    default:
+      return null;
+  }
+}
+
+type Experience = Profile["experience"][number];
+
+/** The paid job the candidate holds now, or null. A club or a team (paid: false) is never an employer. */
+export function currentJob(profile: Profile): Experience | null {
+  return profile.experience.find((e) => e.current && e.paid) ?? null;
+}
+
+/**
+ * The job a work history entry or a "most recent employer" question means: the first paid job in the
+ * profile, which lists the most recent first. A profile with no paid job gives its first entry.
+ */
+export function mostRecentJob(profile: Profile): Experience | null {
+  return profile.experience.find((e) => e.paid) ?? profile.experience[0] ?? null;
+}
+
+/** Whole years of paid experience, rounded down, minimum 0. A club or a team (paid: false) does not count. */
 export function yearsOfExperience(profile: Profile): number {
   let months = 0;
-  for (const e of profile.experience) {
+  for (const e of profile.experience.filter((x) => x.paid)) {
     const start = parseMonth(e.start);
     const end = e.current ? new Date() : parseMonth(e.end);
     if (start && end) months += Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth());

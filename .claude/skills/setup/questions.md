@@ -50,6 +50,7 @@ their status, they should check before applying.
 | How long you can work: term lengths, or "permanent" | `preferences.availability` |
 | The places you want to work, best first | `preferences.preferredLocations` |
 | Will you relocate? | `preferences.willingToRelocate` |
+| If a form lets you pick only one office, which cities, best first? (The posting's own city always comes first. A form that takes several gets every city in a country you can work in.) | `preferences.preferredOffices` |
 | Remote work: preferred, open to it, or no | `preferences.remote` |
 | Can you work in an office or hybrid if the job needs it? | a standing answer |
 
@@ -58,6 +59,7 @@ their status, they should check before applying.
 | Ask | Goes in |
 |---|---|
 | Is every job and project on the resume right, with exact numbers? | `experience`, `projects` |
+| Which roles under experience were not paid jobs: a club, a team, a student society? | `"paid": false` on that `experience` entry |
 | Anything not on the resume that you would mention: awards, hackathons, coursework, open source | `facts` |
 | Languages you speak, and how well | `spokenLanguages` |
 | Programming languages, frameworks and tools, as you would list them | `skills` |

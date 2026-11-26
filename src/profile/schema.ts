@@ -79,6 +79,8 @@ export const ProfileSchema = z.object({
       start: z.string(),
       end: z.string(),
       current: z.boolean().default(false),
+      /** False for a role that was not a paid job: a club, a team, a society. It is still experience, never an employer. */
+      paid: z.boolean().default(true),
       bullets: z.array(z.string()),
     }),
   ),
@@ -143,6 +145,11 @@ export const ProfileSchema = z.object({
     willingToRelocate: YesNo,
     remote: z.enum(["preferred", "open", "no"]),
     preferredLocations: z.array(z.string()),
+    /**
+     * Cities in the order the candidate would take them, for a form that lets them choose only one
+     * office: the posting's own city comes first, then these, then the form's first eligible one.
+     */
+    preferredOffices: z.array(z.string()).default([]),
     howDidYouHear: z.string(),
     /** What to do when a form requires references. "skip" logs and moves on. */
     references: z.enum(["skip"]),

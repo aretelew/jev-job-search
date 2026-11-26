@@ -4,9 +4,10 @@ import { isFormWrite } from "../src/browser/cdp.js";
 import { closestOptions, pickOption, sameItem } from "../src/browser/dropdowns.js";
 import { rightAlready, tookChoice } from "../src/browser/fill.js";
 import { askAgain } from "../src/run/pipeline.js";
+import { boxesToEmpty } from "../src/browser/formRunner.js";
 import { showsPicked } from "../src/util/dates.js";
 import { comparePages, fieldsBlamed, showsPlanned, isClean, isReady, pickNext, pickSubmit, notOnScreen, showsAnother, splitFailures } from "../src/browser/report.js";
-import type { FieldsDump } from "../src/forms/fields.js";
+import type { FieldsDump, PlannedField } from "../src/forms/fields.js";
 
 const hints = ["Edmonton", "Alberta", "AB", "Canada"];
 
@@ -309,5 +310,20 @@ describe("one item of a list of several", () => {
     expect(sameItem(["TypeScript"], "Python")).toBeNull();
     expect(sameItem(["Python IDLE", "Python Scripting"], "Python")).toBeNull();
     expect(sameItem(["SQL Script", "SQL"], "SQL")).toBe("SQL");
+  });
+});
+
+describe("boxesToEmpty", () => {
+  const p = (over: Partial<PlannedField>): PlannedField => ({ id: "f", selector: "#f", kind: "text", label: "Current company", required: false, optionLabel: null, action: "skip", key: "current_company", value: null, confidence: 1, note: null, ...over });
+  it("empties a text box the profile gives nothing for, whatever board it is on", () => {
+    const fields = [
+      p({ id: "a" }),
+      p({ id: "b", key: "leave_blank", label: "Middle name" }),
+      p({ id: "c", action: "fill", value: "Ada" }),
+      p({ id: "d", kind: "select", key: "leave_blank" }),
+      p({ id: "e", key: "unchecked", kind: "checkbox" }),
+      p({ id: "f", action: "review", key: "unknown" }),
+    ];
+    expect(boxesToEmpty({ fields }).map((x) => x.id)).toEqual(["a", "b"]);
   });
 });

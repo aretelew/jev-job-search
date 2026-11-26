@@ -130,6 +130,11 @@ function notePicks(plan: FillPlan, fills: Fill[]): void {
   }
 }
 
+/** Text boxes the plan leaves empty because the profile gives nothing for them: whatever they show was put there by someone else. */
+export function boxesToEmpty(plan: Pick<FillPlan, "fields">): FillPlan["fields"] {
+  return plan.fields.filter((p) => p.action === "skip" && p.value === null && (isProfileKey(p.key) || p.key === "leave_blank") && TYPED_KINDS.has(p.kind));
+}
+
 /** What a list says when the answer it was given is not one of its choices. */
 export const UNFIT = /opens a list of its own|no option matches/;
 
@@ -188,16 +193,16 @@ async function fillPage(page: Page, jev: JevClient, profile: Profile, job: Job, 
   }
   let failedRaw = await applyFills(page, plan.fills, profile, guide);
   notePicks(plan, plan.fills);
-  // A form that keeps a draft between visits (Workday) may hold, in a box the profile has nothing for, what an earlier
-  // visit left there: a middle name that is not the person's. Such a box is emptied, so the form says only what the profile says.
-  if (job.ats === "workday") {
-    for (const p of plan.fields) {
-      if (p.action !== "skip" || p.value !== null || !(isProfileKey(p.key) || p.key === "leave_blank") || !TYPED_KINDS.has(p.kind)) continue;
-      if (!((await shownValues(page, [p.selector]))[0] ?? "")) continue;
-      const emptied = await clearBox(page, p.selector);
-      trace(`${job.company}: "${p.label.slice(0, 40)}" held a value the profile does not give${emptied ? ", emptied" : ", and could not be emptied"}`);
-      if (!emptied) failedRaw.push({ selector: p.selector, why: "the box holds a value your profile does not give, and it could not be emptied" });
-    }
+  // A box the profile has nothing for may hold what someone else wrote there: the board's reading of the resume
+  // ("Current company" from the top of it), or a draft an earlier visit left (Workday). Such a box is emptied
+  // on every board, so the form says only what the profile says.
+  const toEmpty = boxesToEmpty(plan);
+  const held = await shownValues(page, toEmpty.map((p) => p.selector));
+  for (const [i, p] of toEmpty.entries()) {
+    if (!held[i]) continue;
+    const emptied = await clearBox(page, p.selector);
+    trace(`${job.company}: "${p.label.slice(0, 40)}" held a value the profile does not give${emptied ? ", emptied" : ", and could not be emptied"}`);
+    if (!emptied) failedRaw.push({ selector: p.selector, why: "the box holds a value your profile does not give, and it could not be emptied" });
   }
   trace(`${job.company}: filled ${Date.now() - at.started}ms`);
   // A page that finishes starting up after the fill can wipe what was typed, and a phone box throws a number away

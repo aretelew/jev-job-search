@@ -14,7 +14,7 @@ import { isoOf, shapedForBox, toYmd } from "../util/dates.js";
 import type { JevClient } from "../jev/client.js";
 import { choice, noul } from "../jev/questions.js";
 import type { Answer, ChoiceAnswer, NoulAnswer, Questions } from "../jev/types.js";
-import { ALL_KEYS, isProfileKey, isSpecialKey, profileFacts, valueFor, type FieldKey } from "../profile/fieldKeys.js";
+import { ALL_KEYS, currentJob, isProfileKey, isSpecialKey, mostRecentJob, profileFacts, valueFor, valueIfRequired, type FieldKey } from "../profile/fieldKeys.js";
 import { candidatePreferences, monthName, sponsorshipLater, type AgreementKind, type Profile } from "../profile/schema.js";
 import { BANK_INTENTS } from "../answers/bank.js";
 import { countryOfLocations, locationTier } from "../jobs/hardFilters.js";
@@ -22,6 +22,7 @@ import type { Job } from "../jobs/normalize.js";
 import type { DumpedField, FieldsDump, FillPlan, PlannedField } from "./fields.js";
 import { documentPolicy, documentsFor, tailorJob } from "../documents/tailor.js";
 import { loadQueue } from "../jobs/queue.js";
+import { locationQuestions, placeQuestions, placeState, planLocation } from "./locations.js";
 
 const NONE = "__none__";
 
@@ -50,8 +51,10 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
       },
       /** What the candidate has done, so a count or a yes/no about it is answered from the record and not guessed. */
       background: {
-        experience: profile.experience.map((e) => ({ company: e.company, title: e.title, location: e.location, start: e.start, end: e.end, current: e.current })),
-        internships_and_jobs_held: profile.experience.length,
+        experience: profile.experience.map((e) => ({ company: e.company, title: e.title, location: e.location, start: e.start, end: e.end, current: e.current, paid_job: e.paid })),
+        internships_and_jobs_held: profile.experience.filter((e) => e.paid).length,
+        /** A club or a team the candidate is still in is not a job: only a current paid job makes them employed. */
+        currently_employed: currentJob(profile) ? "Yes" : "No",
         projects: profile.projects.map((p) => ({ name: p.name, role: p.role, start: p.start, end: p.end })),
         skills: profile.skills,
         spoken_languages: profile.spokenLanguages,
@@ -90,7 +93,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 16;
+const PLAN_VERSION = 18;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -363,7 +366,7 @@ export function sectionOf(previous: DumpedField[]): "education" | "employment" |
  * in the profile, so they are resolved in code. Returns null when the field is not one of these.
  */
 export function employmentDatePlan(f: DumpedField, previous: DumpedField[], profile: Profile): PlannedField | null {
-  const exp = profile.experience[0];
+  const exp = mostRecentJob(profile);
   if (!exp || sectionOf(previous) !== "employment") return null;
   const label = f.label.trim();
   const base = { id: f.id, selector: f.selector, kind: f.kind, label: f.label, required: f.required, optionLabel: null as string | null };
@@ -430,7 +433,9 @@ export async function mapForm(jev: JevClient, profile: Profile, job: Job, dump: 
   // A plan made with the profile's resume is not the plan for a run that wants a tailored one, and the other way round.
   // The agreement gate reads the person's approvals for this job and whether agreements wait for review: the plan changes with them.
   const agreements = { review: !!profile.preferences.reviewAgreements, kinds: profile.preferences.acceptedAgreements ?? [], approved: (profile.preferences.approvedAgreements ?? []).filter((a) => a.jobId === job.id) };
-  const key = hashOf({ fields, submit: dump.submitSelectors, state: buildFormState(profile, job, { ...dump, url: "" }, []), agreements, form: FORM, documents: documentPolicy(), version: PLAN_VERSION });
+  // Which offices are chosen goes by whether the person will relocate and the order they named.
+  const places = { relocate: profile.preferences.willingToRelocate, offices: profile.preferences.preferredOffices };
+  const key = hashOf({ fields, submit: dump.submitSelectors, state: buildFormState(profile, job, { ...dump, url: "" }, []), agreements, places, form: FORM, documents: documentPolicy(), version: PLAN_VERSION });
   const hit = plans.get(key);
   if (hit) return { ...hit, jobId: job.id, url: dump.url, jevCostUsd: 0 };
   const plan = await mapFormFresh(jev, profile, job, dump);
@@ -474,6 +479,22 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
     planned.push({ id: f.id, selector: f.selector, kind: f.kind, label: f.label, required: f.required, optionLabel: null, action: "fill", key: "cover_letter", value: f.maxLength ? coverText.slice(0, f.maxLength) : coverText, confidence: 1, note: "the cover letter written for this job" });
     resolvedInCode.add(f.id);
   });
+  // A question about which of the employer's places: every option placed by JEV, the choice made in code (locations.ts).
+  const placeQs = locationQuestions(dump.fields.filter((f) => !resolvedInCode.has(f.id)), profile);
+  if (placeQs.length) {
+    const questions = Object.entries(placeQuestions(placeQs, profile));
+    const placed: Record<string, Answer> = {};
+    for (let i = 0; i < questions.length; i += FORM.fieldsPerCall) {
+      Object.assign(placed, await jev.decide(placeState(job, profile), Object.fromEntries(questions.slice(i, i + FORM.fieldsPerCall)), `map-form:${job.id}:${job.company}:places`));
+    }
+    for (const q of placeQs) {
+      const plannedHere = planLocation(q, placed, profile, job, (f, value) => gateAnswer(f, value, profile, job));
+      for (const p of plannedHere ?? []) {
+        planned.push(p);
+        resolvedInCode.add(p.id);
+      }
+    }
+  }
   const askable = dump.fields.filter((f) => f.kind !== "file" && !resolvedInCode.has(f.id));
   // A chunk too large for JEV's context (long questions, long option lists) is halved and asked again.
   const ask = async (chunk: DumpedField[]): Promise<Record<string, Answer>> => {
@@ -520,7 +541,7 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
     fills: ordered
       .filter((p) => p.action === "fill" && p.value !== null)
       // A list may know the field of study by another name. The profile says which names are the same field.
-      .map((p) => ({ selector: p.selector, kind: p.kind, value: p.value as string, ...alternatesFor(p, profile) })),
+      .map((p) => ({ selector: p.selector, kind: p.kind, value: p.value as string, ...alternatesFor(p, profile), ...(p.values ? { values: p.values } : {}) })),
     uploads: ordered.filter((p) => p.action === "upload").map((p) => ({ selector: p.selector, path: p.value as string })),
     drafts: ordered.filter((p) => p.action === "draft").map((p) => {
       const f = dump.fields.find((x) => x.id === p.id) as DumpedField;
@@ -630,8 +651,9 @@ export function planField(f: DumpedField, answer: Answer | undefined, profile: P
     // A list takes one language: the first the profile names. A box that takes any text gets them all.
     if (value !== null && key === "spoken_languages" && (f.kind === "combobox" || f.kind === "select") && profile.spokenLanguages[0]) value = profile.spokenLanguages[0].name;
     if (value === null) {
-      if (key === "gpa") return { ...base, action: f.required ? "fill" : "skip", key, value: f.required ? gpaValue(profile) : null, confidence: a.confidence, note: f.required ? "GPA given only because the field is required" : "GPA not volunteered" };
-      return { ...base, action: f.required ? "review" : "skip", key, value: null, confidence: a.confidence, note: f.required ? "required but the profile has no value" : null };
+      const fallback = f.required ? valueIfRequired(profile, key) : null;
+      if (fallback) return { ...base, action: "fill", key, value: fallback.value, confidence: a.confidence, note: fallback.why };
+      return { ...base, action: f.required ? "review" : "skip", key, value: null, confidence: a.confidence, note: f.required ? "required but the profile has no value" : key === "gpa" ? "GPA not volunteered" : null };
     }
     if (f.kind === "calendar") {
       // A calendar takes a day. A value that names only a month is its first day; anything that is not a date goes to Claude.
@@ -668,11 +690,6 @@ function agreedConfidence(a: ChoiceAnswer, profile: Profile, job: Job): number {
   if (value === null) return a.confidence;
   const agreed = Object.entries(a.probabilities).reduce((sum, [key, p]) => (valueOf(key) === value ? sum + p : sum), 0);
   return Math.min(1, Math.max(a.confidence, agreed));
-}
-
-function gpaValue(profile: Profile): string | null {
-  const g = profile.education[0]?.gpa;
-  return g?.cumulative !== undefined ? g.cumulative.toFixed(2) : null;
 }
 
 /** Profile value for a key, with the two job-dependent keys resolved against the posting's country. */

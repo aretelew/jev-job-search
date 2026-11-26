@@ -453,3 +453,54 @@ describe("needing sponsorship outside the authorized countries", () => {
     expect(profileFacts({ ...profile, workAuthorization: { ...profile.workAuthorization, requiresSponsorshipElsewhere: true } }).requires_sponsorship_outside_authorized_countries).toBe("Yes");
   });
 });
+
+describe("current and most recent employer", () => {
+  const j = job(["Toronto, ON"]);
+  const pick = (choice: string) => ({ type: "choice" as const, choice, probabilities: { [choice]: 1 }, confidence: 1 });
+  const internship = profile.experience[0]!;
+  const club = { company: "Robotics Club", title: "Lead", location: "Toronto, ON", start: "2024-09", end: "present", current: true, paid: false, bullets: ["Led the build team."] };
+  const withClub = { ...profile, experience: [club, internship] };
+
+  it("never gives a job that has ended, or a club, as the current company", () => {
+    expect(valueFor(profile, "current_company")).toBeNull();
+    expect(valueFor(profile, "current_title")).toBeNull();
+    expect(valueFor(withClub, "current_company")).toBeNull();
+    expect(valueFor(profile, "most_recent_company")).toBe("Example Corp");
+    expect(valueFor(withClub, "most_recent_company")).toBe("Example Corp");
+    expect(valueFor(withClub, "most_recent_title")).toBe("Software Engineer Intern");
+  });
+
+  it("gives a current paid job as the current company", () => {
+    const working = { ...profile, experience: [{ ...internship, end: "present", current: true }] };
+    expect(valueFor(working, "current_company")).toBe("Example Corp");
+    expect(valueFor(working, "current_title")).toBe("Software Engineer Intern");
+  });
+
+  it("counts only paid jobs toward years of experience", () => {
+    expect(valueFor(withClub, "years_of_experience")).toBe("0");
+  });
+
+  it("leaves an optional current-company box empty and gives the school to a required one", () => {
+    expect(planField(field({ label: "Current company" }), pick("current_company"), profile, j)).toMatchObject({ action: "skip", value: null });
+    expect(planField(field({ label: "Current company", required: true }), pick("current_company"), profile, j)).toMatchObject({ action: "fill", value: "University of Alberta" });
+    expect(planField(field({ label: "Current title", required: true }), pick("current_title"), profile, j)).toMatchObject({ action: "fill", value: "Student" });
+  });
+
+  it("gives a GPA the person did not volunteer only to a box that requires it", () => {
+    expect(planField(field({ label: "GPA" }), pick("gpa"), profile, j)).toMatchObject({ action: "skip", value: null, note: "GPA not volunteered" });
+    expect(planField(field({ label: "GPA", required: true }), pick("gpa"), profile, j)).toMatchObject({ action: "fill", value: "3.50" });
+    const none = { ...profile, education: [{ ...profile.education[0]!, gpa: undefined }] };
+    expect(planField(field({ label: "GPA", required: true }), pick("gpa"), none, j)).toMatchObject({ action: "review", value: null });
+  });
+
+  it("sets a required current-company box aside when the candidate is not a student", () => {
+    const graduated = { ...profile, education: [{ ...profile.education[0]!, status: "completed" as const }] };
+    expect(planField(field({ label: "Current company", required: true }), pick("current_company"), graduated, j)).toMatchObject({ action: "review", value: null });
+  });
+
+  it("fills work-history dates from the most recent paid job, not from a club listed above it", () => {
+    const above = [field({ id: "c", label: "Company name" }), field({ id: "t", label: "Title" })];
+    expect(employmentDatePlan(field({ kind: "text", label: "Start date year" }), above, withClub)).toMatchObject({ action: "fill", value: "2026" });
+    expect(employmentDatePlan(field({ kind: "checkbox", label: "Current role" }), above, withClub)).toMatchObject({ action: "skip" });
+  });
+});

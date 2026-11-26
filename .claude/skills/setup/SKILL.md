@@ -68,6 +68,11 @@ Rules for this step:
 - Never invent or round a fact. If you are not sure, ask.
 - Never guess a demographic answer. Every one of them can be declined.
 - `resume.path` is the absolute path of `documents/resume.pdf`.
+- A role under experience that was not a paid job (a club, a team, a
+  student society) gets `"paid": false`. It stays on the resume and in
+  written answers, but it is never given as a current employer and never
+  counts toward years of experience. Ask when the resume does not make it
+  clear.
 - These files are git-ignored. Never commit them and never paste their
   contents into a file that is tracked.
 

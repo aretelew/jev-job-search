@@ -179,6 +179,8 @@ are `submitGapByHost`, `perEmployerPerRun` and `employerGapMs` in
 | Your name, contact details, address and links | Your profile |
 | School, degree, field of study, start and graduation dates | Your profile |
 | Jobs you have held, with their dates | Your profile |
+| "Current company" and "Current title" | Your current paid job. With none, left empty, or your school and "Student" if the box is required. A club or a team marked `"paid": false` is never given here |
+| Years of experience | Your paid jobs only |
 | "Are you authorized to work here?" and "Will you need sponsorship?" | Your profile, worked out for the country of each job |
 | Gender, ethnicity, veteran status, disability | Your profile. You can decline each one. |
 | Relocation, office days, start date, availability | Your standing answers |
