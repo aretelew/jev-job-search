@@ -87,7 +87,7 @@ export function showsPicked(want: string, shown: string): boolean {
  * answer loses its double spaces. What they must not do is show something else.
  */
 /** True when `part` appears in `whole` as whole words. A hyphen joins words, so "binary" is not in "non-binary". */
-function hasWords(whole: string, part: string): boolean {
+export function hasWords(whole: string, part: string): boolean {
   const edge = "[^a-z0-9-]";
   return new RegExp(`(?:^|${edge})${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|${edge})`).test(whole);
 }

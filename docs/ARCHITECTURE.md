@@ -68,6 +68,7 @@ Timing on 2026-10-02: 4,748 unique postings, 478 rated, 61 seconds, $0.075.
 | `src/browser/submit.ts` | Sending a form and reading what the page became |
 | `src/forms/*.js` | The three scripts that run inside the page |
 | `src/forms/mapForm.ts` | Asking JEV what goes in each field |
+| `src/forms/locations.ts` | Questions about which of the employer's offices: JEV places each option, code chooses |
 | `src/answers/` | The writer (headless Claude Code by default; the Claude API, the Codex CLI or an OpenAI-compatible service when `.env` says so), the answer memory, drafts and voice |
 | `src/documents/` | Tailored resumes and cover letters: the writer's draft, the truth gate (`unsupportedClaims`), HTML rendered to PDF through Chrome (`printPdf`) |
 | `src/accounts/` | Boards that want an account: what the person allowed (`config.ts`), the Keychain (`secrets.ts`), the sign-in itself (`auth.ts`), one adapter per board (`workday.ts`), whether a job may be taken (`capability.ts`) |
@@ -145,6 +146,16 @@ the page's own writes (POST, PUT, PATCH) with any that failed.
   schools) is asked as "which value belongs here" and matched in code. A
   file box gets the document it asks for (`fileBoxWants`): the resume, a
   transcript if the profile has one, or nothing.
+- A question about which of the employer's places (offices to tick, one
+  office to pick, a dropdown that takes several) is planned by
+  `locations.ts`, for a candidate who will relocate. JEV places each option
+  against `authorizedCountries` (a city, a region inside them, remote,
+  elsewhere, not a place) and code chooses: every city and region that
+  qualifies, as many as the question takes; remote only when none does;
+  never "none of the above". Where only one may be chosen: the posting's
+  own city, then `preferences.preferredOffices` in order, then the form's
+  first. A list that takes several carries its choices as `values`, each
+  picked on its own and each read back.
 - `fillFields.js` writes plain controls: native value setters so React sees
   the change, `input` and `change` events, select by value then label,
   radios and button groups by label, checkboxes by click.

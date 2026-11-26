@@ -1,5 +1,5 @@
 // Runs inside the page. A function, called by the fill runner with the fills
-// of a plan produced by mapForm: [{ selector, kind, value }]. Returns a JSON
+// of a plan produced by mapForm: [{ selector, kind, value, values? }]. Returns a JSON
 // report of what was applied and what failed. To use it by hand in a browser
 // console, wrap it in parentheses and call it with the array.
 (fills) => {
@@ -19,7 +19,14 @@
       const el = document.querySelector(f.selector);
       if (!el) { report.failed.push({ selector: f.selector, why: "not found" }); continue; }
       el.scrollIntoView({ block: "center" });
-      if (f.kind === "select") {
+      if (f.kind === "select" && el.multiple && f.values && f.values.length) {
+        // A list that takes several: exactly the wanted options end up selected, each matched by its text or its value.
+        const want = f.values.map(norm);
+        const on = [...el.options].filter((o) => want.includes(norm(o.text)) || f.values.includes(o.value));
+        if (on.length < f.values.length) { report.failed.push({ selector: f.selector, why: "options not found: " + f.values.filter((v) => !on.some((o) => norm(o.text) === norm(v) || o.value === v)).join(" | ") }); continue; }
+        [...el.options].forEach((o) => { o.selected = on.includes(o); });
+        fire(el, ["input", "change"]);
+      } else if (f.kind === "select") {
         const opt = [...el.options].find((o) => o.value === f.value) || [...el.options].find((o) => norm(o.text) === norm(f.value)) || [...el.options].find((o) => norm(o.text).includes(norm(f.value)));
         if (!opt) { report.failed.push({ selector: f.selector, why: "option not found: " + f.value }); continue; }
         setNative(el, opt.value);

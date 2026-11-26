@@ -34,8 +34,19 @@ export const DumpedField = z.object({
   section: z.string().default(""),
   /** True when the "radio" is a group of plain buttons rather than input elements. */
   buttonGroup: z.boolean().default(false),
+  /** True for a list that takes several choices: a select with `multiple`, a react-select with isMulti. */
+  multiple: z.boolean().optional(),
 });
 export type DumpedField = z.infer<typeof DumpedField>;
+
+/**
+ * The question each checkbox answers, by selector: the boxes that share a name, or, when each box
+ * has a name of its own (Ashby), the boxes under one question. "" for a box that stands alone.
+ */
+export function checkboxGroups(fields: Pick<DumpedField, "kind" | "selector" | "name" | "section">[]): Map<string, string> {
+  const boxes = fields.filter((f) => f.kind === "checkbox");
+  return new Map(boxes.map((f) => [f.selector, f.name && boxes.filter((o) => o.name === f.name).length > 1 ? `name:${f.name}` : f.section ? `question:${f.section}` : ""]));
+}
 
 export const FieldsDump = z.object({
   url: z.string(),
@@ -97,6 +108,8 @@ export const PlannedField = z.object({
   optionLabel: z.string().nullable(),
   confidence: z.number(),
   note: z.string().nullable(),
+  /** For a list that takes several choices: every option to pick, by label. `value` then names them for people to read. */
+  values: z.array(z.string()).optional(),
 });
 export type PlannedField = z.infer<typeof PlannedField>;
 
@@ -105,8 +118,8 @@ export const FillPlan = z.object({
   url: z.string(),
   fields: z.array(PlannedField),
   /** Fields the browser script should apply, already filtered to action = fill. */
-  /** alternates: other wordings of the same value, for a list that does not have the first. picked: the option a list took. */
-  fills: z.array(z.object({ selector: z.string(), kind: FieldKind, value: z.string(), alternates: z.array(z.string()).optional(), picked: z.string().optional() })),
+  /** alternates: other wordings of the same value, for a list that does not have the first. picked: the option a list took. values: every choice of a list that takes several. */
+  fills: z.array(z.object({ selector: z.string(), kind: FieldKind, value: z.string(), alternates: z.array(z.string()).optional(), picked: z.string().optional(), values: z.array(z.string()).optional() })),
   uploads: z.array(z.object({ selector: z.string(), path: z.string() })),
   drafts: z.array(z.object({ id: z.string(), selector: z.string(), label: z.string(), hint: z.string(), maxLength: z.number().nullable(), intent: z.string() })),
   reviews: z.array(z.object({ id: z.string(), selector: z.string(), kind: FieldKind, label: z.string(), options: z.array(z.string()), why: z.string() })),

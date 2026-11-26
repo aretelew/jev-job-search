@@ -119,6 +119,10 @@
       "Canada",
       "Remote"
     ],
+    "preferredOffices": [
+      "Vancouver",
+      "Toronto"
+    ],
     "howDidYouHear": "LinkedIn",
     "references": "skip",
     "coverLetter": "never"

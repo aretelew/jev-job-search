@@ -320,6 +320,8 @@
       autocomplete: el.getAttribute("autocomplete") || "",
       section: sectionFor(el),
     };
+    // A list that takes several choices: a select with multiple, a listbox that says so, a react-select drawn for many.
+    if ((tag === "select" && el.multiple) || el.getAttribute("aria-multiselectable") === "true" || (kind === "combobox" && el.closest('[class*="is-multi"]'))) f.multiple = true;
     // For an option, the question it answers says more than the page section it sits in.
     if (kind === "checkbox" || kind === "radio") f.section = groupQuestionFor(el) || optionQuestionFor(el) || f.section;
     f.required = isRequired(el, f.label) || /[*✱]\s*$|^\s*[*✱]/.test(questionFor(el));

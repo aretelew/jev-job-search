@@ -146,6 +146,7 @@ export async function readDropdownOptions(page: Page, fields: DumpedField[]): Pr
     fields
       .filter((f) => f.kind === "combobox" && f.options.length === 0)
       .map(async (f) => {
+        if (await page.awj<boolean>("reactMulti", f.selector).catch(() => false)) f.multiple = true;
         const opts = await readOptions(page, f.selector);
         if (opts.length > 0 && opts.length <= FORM.maxOptionsForJev) f.options = opts.map((o) => ({ value: o, label: o }));
       }),

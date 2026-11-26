@@ -22,7 +22,7 @@ import type { Job } from "../jobs/normalize.js";
 import type { DumpedField, FieldsDump, FillPlan, PlannedField } from "./fields.js";
 import { documentPolicy, documentsFor, tailorJob } from "../documents/tailor.js";
 import { loadQueue } from "../jobs/queue.js";
-import { locationQuestions, placeQuestions, placeState, planLocation } from "./locations.js";
+import { planLocations } from "./locations.js";
 
 const NONE = "__none__";
 
@@ -480,20 +480,9 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
     resolvedInCode.add(f.id);
   });
   // A question about which of the employer's places: every option placed by JEV, the choice made in code (locations.ts).
-  const placeQs = locationQuestions(dump.fields.filter((f) => !resolvedInCode.has(f.id)), profile);
-  if (placeQs.length) {
-    const questions = Object.entries(placeQuestions(placeQs, profile));
-    const placed: Record<string, Answer> = {};
-    for (let i = 0; i < questions.length; i += FORM.fieldsPerCall) {
-      Object.assign(placed, await jev.decide(placeState(job, profile), Object.fromEntries(questions.slice(i, i + FORM.fieldsPerCall)), `map-form:${job.id}:${job.company}:places`));
-    }
-    for (const q of placeQs) {
-      const plannedHere = planLocation(q, placed, profile, job, (f, value) => gateAnswer(f, value, profile, job));
-      for (const p of plannedHere ?? []) {
-        planned.push(p);
-        resolvedInCode.add(p.id);
-      }
-    }
+  for (const p of await planLocations(jev, dump.fields.filter((f) => !resolvedInCode.has(f.id)), profile, job, (f, value) => gateAnswer(f, value, profile, job))) {
+    planned.push(p);
+    resolvedInCode.add(p.id);
   }
   const askable = dump.fields.filter((f) => f.kind !== "file" && !resolvedInCode.has(f.id));
   // A chunk too large for JEV's context (long questions, long option lists) is halved and asked again.

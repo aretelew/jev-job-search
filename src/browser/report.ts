@@ -5,16 +5,16 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { writeAtomic } from "../util/store.js";
-import { showsPicked, showsValue } from "../util/dates.js";
+import { hasWords, showsPicked, showsValue } from "../util/dates.js";
 import path from "node:path";
 import { FORM, PATHS } from "../config.js";
-import type { FieldsDump, FillPlan } from "../forms/fields.js";
+import { checkboxGroups, type FieldsDump, type FillPlan } from "../forms/fields.js";
 import type { Resolution } from "../answers/memory.js";
 import type { ControlState } from "./session.js";
 import type { WaitingFor } from "../jobs/queue.js";
 
 /** picked: the option a dropdown took for the value, in the list's own words ("Canada +1" for "+1"). It is what the box is then expected to show. */
-export type Fill = { selector: string; kind: string; value: string; picked?: string | undefined; /** Other wordings of the same value, tried in order on a list that does not have the first. */ alternates?: string[] | undefined };
+export type Fill = { selector: string; kind: string; value: string; picked?: string | undefined; /** Other wordings of the same value, tried in order on a list that does not have the first. */ alternates?: string[] | undefined; /** Every choice of a list that takes several, each picked on its own. */ values?: string[] | undefined };
 export type FieldReport = { label: string; required: boolean; action: string; shown: string; note: string | null };
 export type TakeHome = { text: string; url: string };
 export type FillReport = {
@@ -123,8 +123,7 @@ export function blockedReport(job: { id: string; company: string; title: string;
 export function emptyRequiredFields(d: FieldsDump, plan: FillPlan, shown: string[], states: ControlState[]): FillPlan["fields"] {
   // A required group of checkboxes is satisfied by any one tick. The group is the boxes that share a name,
   // or, when each box has a name of its own (Ashby), the boxes under one question.
-  const boxes = d.fields.filter((f) => f.kind === "checkbox");
-  const groupOf = new Map(boxes.map((f) => [f.selector, f.name && boxes.filter((o) => o.name === f.name).length > 1 ? `name:${f.name}` : f.section ? `question:${f.section}` : ""]));
+  const groupOf = checkboxGroups(d.fields);
   const answeredGroups = new Set(plan.fields.filter((f, i) => f.kind === "checkbox" && shown[i]).map((f) => groupOf.get(f.selector)).filter((n): n is string => !!n));
   return plan.fields.filter((f, i) => f.required && !shown[i] && states[i] !== "off" && f.action !== "upload" && !(f.kind === "checkbox" && answeredGroups.has(groupOf.get(f.selector) ?? "")));
 }
@@ -136,9 +135,10 @@ export const emptyRequired = (d: FieldsDump, plan: FillPlan, shown: string[], st
  * (showsValue); a choice by the option that was picked; a checkbox by whether it is ticked.
  * Anything else only has to show something.
  */
-export function showsPlanned(f: { kind: string; value: string | null; optionLabel?: string | null }, shown: string): boolean {
+export function showsPlanned(f: { kind: string; value: string | null; optionLabel?: string | null; values?: string[] | undefined }, shown: string): boolean {
   const value = f.value ?? "";
   const n = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+  if (f.values?.length) return showsEvery(f.values, shown);
   if (f.kind === "checkbox") return /^(true|yes|1|on|checked)$/i.test(value) ? !!shown : !shown;
   if (f.kind === "radio" || f.kind === "select") {
     const expect = [f.optionLabel, value].filter((x): x is string => !!x);
@@ -148,6 +148,16 @@ export function showsPlanned(f: { kind: string; value: string | null; optionLabe
   if (f.kind === "combobox") return showsPicked(value, shown) || (!!f.optionLabel && showsPicked(f.optionLabel, shown));
   if (["text", "email", "tel", "url", "number", "textarea", "date"].includes(f.kind)) return showsValue(value, shown);
   return !!shown;
+}
+
+/**
+ * True when a list of several choices shows every one of them, each as whole words of what it
+ * shows: "Denver, CO" in "Denver, CO, Austin, TX". A short one ("NYC") counts the same way.
+ */
+export function showsEvery(items: string[], shown: string): boolean {
+  const n = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+  const s = n(shown);
+  return !!s && items.every((item) => !!n(item) && hasWords(s, n(item)));
 }
 
 /**

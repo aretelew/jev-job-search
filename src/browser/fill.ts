@@ -11,7 +11,7 @@ import { sleep, type Page } from "./cdp.js";
 import { pickDate } from "./calendar.js";
 import { showsPicked, showsValue } from "../util/dates.js";
 import { fillDropdown, fillDropdownByClicking } from "./dropdowns.js";
-import { showsPlanned, type Failure, type Fill } from "./report.js";
+import { showsEvery, showsPlanned, type Failure, type Fill } from "./report.js";
 import { controlStates, inFront, script, shownValues, trace, type Point } from "./session.js";
 
 /** Applies fills to the open form. Returns the ones that did not land. */
@@ -31,7 +31,7 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
   // A box of several items that holds one that is none of them (a whole list typed in as one item) is not right, whatever it shows.
   const stale = new Set<string>();
   for (const f of wanted) {
-    const items = f.kind === "combobox" ? f.value.split(/\s*,\s*/).filter(Boolean) : [];
+    const items = f.kind === "combobox" ? (f.values ?? f.value.split(/\s*,\s*/).filter(Boolean)) : [];
     if (items.length > 2 && (await page.awj<Point>("stalePill", f.selector, items).catch(() => ({ x: 0, y: 0, ok: false }))).ok) stale.add(f.selector);
   }
   const fills = wanted.filter((f, i) => stale.has(f.selector) || !rightAlready(f, before[i] ?? ""));
@@ -75,6 +75,13 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
   }
   for (const f of fills.filter((x) => x.kind === "combobox")) {
     const t = Date.now();
+    if (f.values?.length) {
+      const { why, method } = await pickEach(page, f, hints, guide?.prefer(f.selector) === "clicked");
+      if (why) failed.push({ selector: f.selector, why });
+      else how.set(f.selector, method);
+      trace(`dropdown ${f.selector} took ${f.values.length} choice(s) in ${Date.now() - t}ms${why ? `, failed: ${why}` : ""}`);
+      continue;
+    }
     let { why, method } = await fillDropdown(page, f.selector, f.value, hints, guide?.prefer(f.selector) === "clicked", f);
     // A list that has no such choice is offered the other names the profile gives for the same thing, in order.
     for (const other of why && NO_SUCH_CHOICE.test(why) ? (f.alternates ?? []) : []) {
@@ -133,7 +140,7 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
     if (landed) guide?.landed(f.selector, how.get(f.selector) ?? "script");
     if (landed || failed.some((x) => x.selector === f.selector)) continue;
     if (f.kind === "checkbox" && !/^(true|yes|1|on|checked)$/i.test(f.value)) continue;
-    const why = f.kind === "combobox" ? await fillDropdownByClicking(page, f.selector, f.value, hints, f) : TYPED_KINDS.has(f.kind) ? await typeInto(page, f.selector, f.value) : f.kind === "radio" ? await clickGroupOption(page, f.selector, f.value) : "the page did not keep the value";
+    const why = f.kind === "combobox" ? (f.values?.length ? (await pickEach(page, f, hints, true)).why : await fillDropdownByClicking(page, f.selector, f.value, hints, f)) : TYPED_KINDS.has(f.kind) ? await typeInto(page, f.selector, f.value) : f.kind === "radio" ? await clickGroupOption(page, f.selector, f.value) : "the page did not keep the value";
     const after = (await shownValues(page, [f.selector]))[0] ?? "";
     if (why || !after) failed.push({ selector: f.selector, why: why ?? "the page did not keep the value" });
     else if (f.kind === "combobox" ? !tookChoice(f, after) : TYPED_KINDS.has(f.kind) && !showsValue(f.value, after)) failed.push({ selector: f.selector, why: `the box shows "${after.slice(0, 40)}" instead of "${f.value.slice(0, 40)}"` });
@@ -161,8 +168,26 @@ export function clearBox(page: Page, selector: string): Promise<boolean> {
   });
 }
 
-/** True when a dropdown shows the value it was given, or the option that was picked for that value ("Canada +1" for "+1"). */
+/**
+ * Picks every choice of a list that takes several, one at a time. A choice the box already shows is
+ * left alone: picking it again would take it off. Returns the first reason one did not go in.
+ */
+async function pickEach(page: Page, f: Fill, hints: string[], byClicking: boolean): Promise<{ why: string | null; method: Method }> {
+  let method: Method = byClicking ? "clicked" : "script";
+  for (const item of f.values ?? []) {
+    const shown = (await shownValues(page, [f.selector]))[0] ?? "";
+    if (showsEvery([item], shown)) continue;
+    const done = await fillDropdown(page, f.selector, item, hints, byClicking);
+    if (done.why) return { why: `"${item}": ${done.why}`, method };
+    if (done.method === "clicked") method = "clicked";
+    await page.writesSettled(BROWSER.saveMs);
+  }
+  return { why: null, method };
+}
+
+/** True when a dropdown shows the value it was given, or the option that was picked for that value ("Canada +1" for "+1"). A list of several shows every choice. */
 export function tookChoice(f: Fill, shown: string): boolean {
+  if (f.values?.length) return showsEvery(f.values, shown);
   return showsPicked(f.value, shown) || (!!f.picked && showsPicked(f.picked, shown));
 }
 

@@ -97,6 +97,11 @@
       const a = adapter(q(sel));
       return a ? optionsOf(a).map((o) => labelOf(a, o)) : null;
     },
+    /** True for a react-select that takes several choices. */
+    reactMulti(sel) {
+      const a = adapter(q(sel));
+      return !!(a && a.shape === "select" && a.p.selectProps && a.p.selectProps.isMulti);
+    },
     /** Starts a search in a search-as-you-type dropdown without touching the keyboard. */
     reactSearch(sel, typed) {
       const a = adapter(q(sel));
@@ -356,6 +361,7 @@
         const wrap = el.closest('[class*="field"], [class*="upload"], [class*="file"], fieldset, div');
         return el.files && el.files.length ? el.files[0].name : /\.pdf/i.test(text(wrap)) ? text(wrap).slice(0, 80) : "";
       }
+      if (el.tagName === "SELECT" && el.multiple) return [...el.selectedOptions].filter((o) => o.value !== "").map(text).join(", ");
       if (el.tagName === "SELECT") return el.selectedOptions[0] && el.value !== "" ? text(el.selectedOptions[0]) : "";
       // A search-and-pick box shows what is picked beside a search input that stays empty.
       if (el.closest(PROMPT)) return pickedIn(el.closest(PROMPT));
