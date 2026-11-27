@@ -61,10 +61,23 @@ export function postingKey(raw: string): string {
   // Workable links one job as /j/CODE and as /company/j/CODE.
   const workable = hostIs(host, "workable.com") ? /\/j\/([A-Z0-9]{6,})/i.exec(url)?.[1] : undefined;
   if (workable) return `workable:${workable.toUpperCase()}`;
+  const requisition = workdayRequisition(url);
+  if (requisition) return `workday:${requisition}`;
   const gh = /[?&](?:gh_jid|token)=(\d+)/.exec(url)?.[1] ?? (hostIs(host, "greenhouse.io") ? /\/jobs\/(\d+)/.exec(url)?.[1] : undefined);
   // Greenhouse numbers its EU and US postings separately.
   if (gh) return `greenhouse${hostIs(host, "eu.greenhouse.io") ? "-eu" : ""}:${gh}`;
   return url;
+}
+
+/**
+ * A Workday posting by its employer and requisition, as in "asml:J-00357859". The lists link one
+ * posting under several site names ("ASMLEXT1" and "asmlext1", "Cisco_Careers" and "en-US"), and
+ * none of them changes which posting it is.
+ */
+function workdayRequisition(url: string): string | null {
+  const tenant = workday.tenantOf(url)?.tenant;
+  const requisition = /\/job\/(?:[^/]+\/)?[^/]*_([A-Za-z0-9-]+)(?:\/|$)/.exec(new URL(url).pathname)?.[1];
+  return tenant && requisition ? `${tenant}:${requisition.toUpperCase()}` : null;
 }
 
 /** Drops tracking params and fragments so the same posting from two lists dedupes. */
