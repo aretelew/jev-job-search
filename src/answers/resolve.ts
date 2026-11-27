@@ -32,6 +32,7 @@ const SYSTEM = [
   "- needs_review is only for that. When the facts or a standing answer reasonably settle a field, answer it and keep the verdict \"ready\". A person who is not employed has no notice period, so the shortest option is true.",
   "- Never sign for the candidate. A field that asks them to type their name to agree to an NDA or any other contract, and any NDA, is left unanswered and the verdict is \"needs_review\". A checkbox that acknowledges an agreement, a notice or terms follows the standing answers.",
   "- Never choose a date, a time slot or a venue for an interview, an assessment or an event on the candidate's behalf. That field is left unanswered and the verdict is \"needs_review\".",
+  "- How the candidate heard about the job: never name a site, a person, a referral or an event the facts do not give. Choose an online job posting, the company's own careers site, or Other (for a list under a heading, \"Job Board > Other\"). If none of those is offered, leave it unanswered and set the verdict to \"needs_review\".",
   "- If the form requires a cover letter or references, set verdict to \"skip\" with the reason.",
   "- Whether to apply is the candidate's decision, already made. A posting that prefers another graduation date, location or visa status is not a reason to stop: answer every question truthfully, follow the standing answers, and note the mismatch in reason while keeping the verdict \"ready\".",
   "",

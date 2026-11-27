@@ -10,7 +10,7 @@
  */
 import { FORM, CACHE, PATHS } from "../config.js";
 import { hashOf, KeyedCache } from "../util/cache.js";
-import { isoOf, shapedForBox, toYmd } from "../util/dates.js";
+import { CHOICE_PATH, isoOf, shapedForBox, toYmd } from "../util/dates.js";
 import type { JevClient } from "../jev/client.js";
 import { choice, noul } from "../jev/questions.js";
 import type { Answer, ChoiceAnswer, NoulAnswer, Questions } from "../jev/types.js";
@@ -93,7 +93,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 18;
+const PLAN_VERSION = 21;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -235,13 +235,60 @@ export function agreementHold(f: Gated, value: string, profile: Profile, job: Jo
   return "accepting this is yours to decide; a standing answer about agreements lets the tool tick it";
 }
 
+/** A question about how the candidate came to the job. */
+const SOURCE_Q = /how did you (?:first )?(?:hear|learn|find out|find|come across|discover)|where did you (?:first )?(?:hear|learn|find|see|come across)|\b(?:referral|recruiting|recruitment|applicant|candidate|job|application|lead) source\b|^\s*source\b/i;
+/** A source that names nobody: a posting online, the employer's own site, or other. Matched on lower-case words, the employer's name read as "company". */
+const GENERIC_SOURCE = /^(?:other(?: source)?|online|internet|web|website|search engine|(?:online|internet) (?:search|posting|listing|ad|advertisement)s?|(?:(?:online|internet) )?job (?:board|posting|post|site|listing|ad|advertisement|search)(?: engine| website| site)?s?|(?:company|corporate|employer)(?: s)? (?:web ?site|careers?(?: web ?site| site| page| portal)?)|careers? (?:web ?site|site|page|portal)|company)$/;
+
+/**
+ * What the person said themselves to a question like this one: their standing answers, which for a run
+ * also hold the answers they saved for that one job (forJob in src/run/pipeline.ts merges them in).
+ */
+const saidAbout = (profile: Profile, about: (question: string) => boolean): string[] => profile.answers.filter((a) => about(a.question)).map((a) => a.answer);
+
+/**
+ * Why an answer to "how did you hear about us" may not go in: it names a source (a site, a referral,
+ * an event) the person did not give. Each step of a path ("Job Board > Other") is checked. A source
+ * the person gave is always allowed: the profile's, a standing answer, or one they saved for this job.
+ */
+export function sourceHold(f: Gated, value: string, profile: Profile, job: Job): string | null {
+  if (!SOURCE_Q.test(f.label)) return null;
+  const words = (s: string) => s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+  const theirs = [profile.preferences.howDidYouHear, ...saidAbout(profile, (q) => SOURCE_Q.test(q))];
+  const own = new Set(theirs.flatMap((s) => s.split(CHOICE_PATH)).map(words).filter(Boolean));
+  const company = words(job.company);
+  const steps = value.split(CHOICE_PATH).map((s) => words(s)).filter(Boolean);
+  // The person's own source, under whatever heading the list files it ("Social Media > LinkedIn").
+  if (own.has(steps[steps.length - 1] ?? "")) return null;
+  const named = steps.filter((s) => !own.has(s) && !GENERIC_SOURCE.test(company ? s.replace(company, "company").trim() : s));
+  return named.length ? `"${value.slice(0, 40)}" names a source the profile does not give. Only an online posting, the employer's site or other is known; set preferences.howDidYouHear if it was somewhere else` : null;
+}
+
+/** A question about a clearance the candidate holds now: whether, which agency, what level. Not one about being willing or able to obtain one. */
+const heldClearanceQ = (text: string) => /\bclearance\b/i.test(text) && !/\bobtain|\bwilling|\bable to|\beligib|\bability to|\bqualify for/i.test(text);
+/** An answer that claims nothing: no, none, not applicable. */
+const NO_CLAIM = /^\s*(?:no\b|none\b|n\/?a\b|not applicable|i do not\b|i don'?t\b|i have not\b|does not apply)/i;
+
+/**
+ * Why an answer about a clearance the candidate holds may not go in: the person said they hold none,
+ * and the answer claims one ("DOD", "Secret"). Only an answer that claims nothing passes then.
+ */
+export function clearanceHold(f: Gated, value: string, profile: Profile): string | null {
+  if (!heldClearanceQ(f.label) || !value.trim() || NO_CLAIM.test(value)) return null;
+  const holdsNone = saidAbout(profile, heldClearanceQ).some((a) => polarity(a) === "No" || NO_CLAIM.test(a));
+  if (!holdsNone) return null;
+  return `"${value.slice(0, 40)}" claims a clearance, and the profile says the candidate holds none`;
+}
+
 /**
  * Why an answer may not go in, or null when it may: an agreement the person has not approved
- * (agreementHold), or an answer about the right to work that does not say what the profile says for
- * the country the question means. Used for JEV's picks and the writer's.
+ * (agreementHold), a named source for how the candidate heard of the job that the profile does not
+ * give (sourceHold), a clearance the person said they do not hold (clearanceHold), or an answer
+ * about the right to work that does not say what the profile says for the country the question
+ * means. Used for JEV's picks and the writer's.
  */
 export function gateAnswer(f: Gated, value: string, profile: Profile, job: Job): string | null {
-  const hold = agreementHold(f, value, profile, job);
+  const hold = agreementHold(f, value, profile, job) ?? sourceHold(f, value, profile, job) ?? clearanceHold(f, value, profile);
   if (hold) return hold;
   const category = categoryOf(f);
   if (category !== "authorization" && category !== "sponsorship") return null;
