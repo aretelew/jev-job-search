@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { getJson } from "../../util/http.js";
 import { htmlToText } from "../../util/text.js";
-import { canonicalUrl, jobId, type Job } from "../../jobs/normalize.js";
+import { canonicalUrl, greenhouseEmbedUrl, jobId, type Job } from "../../jobs/normalize.js";
 
 const GhJob = z.object({
   id: z.number(),
@@ -27,6 +27,48 @@ export function greenhouseSlug(url: string): string | null {
 export function greenhouseJobId(url: string): string | null {
   const m = /\/jobs\/(\d+)/.exec(url) ?? /[?&]gh_jid=(\d+)/.exec(url);
   return m ? (m[1] as string) : null;
+}
+
+/** Board names worth trying for an employer: its name run together, hyphenated, then its first word. */
+export function slugGuesses(company: string): string[] {
+  const words = company
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(inc|ltd|llc|corp|corporation|co|company|limited)\b\.?/g, " ")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return [...new Set([words.join(""), words.join("-"), words[0] ?? ""])].filter(Boolean);
+}
+
+const GhPosting = z.object({ id: z.number() });
+
+/**
+ * The board that holds a posting linked only by its id (a careers page with `?gh_jid=`). Each
+ * guessed board is asked for that id, and a posting id belongs to one board only, so a board
+ * that returns it is the right one. Null when none does.
+ */
+export async function findGreenhouseBoard(company: string, id: string, get: (url: string) => Promise<unknown> = getJson): Promise<string | null> {
+  for (const slug of slugGuesses(company)) {
+    try {
+      const posting = GhPosting.parse(await get(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs/${id}`));
+      if (String(posting.id) === id) return slug;
+    } catch {
+      /* not this board */
+    }
+  }
+  return null;
+}
+
+/**
+ * The board's own form for a job linked through the company's careers page (`?gh_jid=`), which
+ * shows the posting without the form. The board is the one in the job's source when it was found
+ * by polling the board, else the one Greenhouse confirms holds the posting. Null when neither.
+ */
+export async function greenhouseFormFor(job: Pick<Job, "url" | "ats" | "source" | "company">, get: (url: string) => Promise<unknown> = getJson): Promise<string | null> {
+  const id = job.ats === "greenhouse" ? /[?&]gh_jid=(\d+)/.exec(job.url)?.[1] : undefined;
+  if (!id) return null;
+  const slug = /greenhouse:([a-z0-9_-]+)/i.exec(job.source)?.[1] ?? (await findGreenhouseBoard(job.company, id, get));
+  return slug ? greenhouseEmbedUrl(slug, id) : null;
 }
 
 export async function fetchGreenhouseBoard(slug: string, companyFallback: string): Promise<Job[]> {

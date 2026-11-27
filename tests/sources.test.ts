@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseReadmeTable } from "../src/sources/githubReadme.js";
 import { parseSimplify } from "../src/sources/simplify.js";
 import { parseSheetCsv } from "../src/sources/sheetImport.js";
-import { greenhouseJobId, greenhouseSlug } from "../src/sources/ats/greenhouse.js";
+import { findGreenhouseBoard, greenhouseFormFor, greenhouseJobId, greenhouseSlug, slugGuesses } from "../src/sources/ats/greenhouse.js";
 import { ashbyJobId, ashbySlug } from "../src/sources/ats/ashby.js";
 import { leverJobId, leverSlug } from "../src/sources/ats/lever.js";
 import { boardsFromJobs } from "../src/sources/companies.js";
@@ -78,6 +78,35 @@ describe("ATS url helpers and board discovery", () => {
     const boards = boardsFromJobs(jobs, [{ ats: "greenhouse", slug: "doordashcanada", company: "DoorDash" }]);
     expect(boards.filter((b) => b.slug === "doordashcanada")).toHaveLength(1);
     expect(boards.some((b) => b.ats === "ashby" && /Superhuman/.test(b.slug))).toBe(true);
+  });
+});
+
+describe("a careers-page link with only a Greenhouse id", () => {
+  it("guesses board names from the employer's name", () => {
+    expect(slugGuesses("Amperity")).toEqual(["amperity"]);
+    expect(slugGuesses("Total Quality Logistics, Inc.")).toEqual(["totalqualitylogistics", "total-quality-logistics", "total"]);
+    expect(slugGuesses("Aptima Inc. (All Jobs)")).toEqual(["aptima"]);
+  });
+  it("takes a guessed board only when Greenhouse returns that very posting from it", async () => {
+    const asked: string[] = [];
+    const get = async (url: string) => {
+      asked.push(url);
+      if (url.includes("/boards/acme-robotics/jobs/42")) return { id: 42 };
+      throw new Error("404");
+    };
+    expect(await findGreenhouseBoard("Acme Robotics", "42", get)).toBe("acme-robotics");
+    expect(asked[0]).toBe("https://boards-api.greenhouse.io/v1/boards/acmerobotics/jobs/42");
+    expect(await findGreenhouseBoard("Acme Robotics", "42", async () => ({ id: 7 }))).toBeNull();
+    expect(await findGreenhouseBoard("Nobody", "42", get)).toBeNull();
+  });
+  it("opens the board's own form: the board the source names, else the confirmed guess", async () => {
+    const viaCareers = { ats: "greenhouse" as const, url: "https://www.acme.com/careers/roles?gh_jid=42", company: "Acme Robotics" };
+    const none = async () => Promise.reject(new Error("404"));
+    const board = async (url: string) => (url.includes("/boards/acmerobotics/jobs/42") ? { id: 42 } : Promise.reject(new Error("404")));
+    expect(await greenhouseFormFor({ ...viaCareers, source: "simplify-newgrad+greenhouse:acme" }, none)).toBe("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=42");
+    expect(await greenhouseFormFor({ ...viaCareers, source: "simplify-newgrad" }, board)).toBe("https://job-boards.greenhouse.io/embed/job_app?for=acmerobotics&token=42");
+    expect(await greenhouseFormFor({ ...viaCareers, source: "simplify-newgrad" }, none)).toBeNull();
+    expect(await greenhouseFormFor({ ats: "lever", url: "https://jobs.lever.co/acme/x", source: "lever:acme", company: "Acme" }, board)).toBeNull();
   });
 });
 

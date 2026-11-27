@@ -12,7 +12,8 @@ import { isApplicationForm, type DumpedField, type FieldsDump, type FillPlan } f
 import { gateAnswer, hasChoosableOptions, mapForm } from "../forms/mapForm.js";
 import { decidePageState } from "../forms/pageState.js";
 import type { JevClient } from "../jev/client.js";
-import { applyUrlFor, greenhouseFallbackUrl, type Job } from "../jobs/normalize.js";
+import { applyUrlFor, type Job } from "../jobs/normalize.js";
+import { greenhouseFormFor } from "../sources/ats/greenhouse.js";
 import type { Profile } from "../profile/schema.js";
 import { loadMemory, recallExact, recallForm, recallSameFields, recallSimilar, remember, saveMemory, type Recalled } from "../answers/memory.js";
 import { contextFingerprint, resolveOpenFields, type OpenField, type Resolution } from "../answers/resolve.js";
@@ -55,7 +56,7 @@ async function openForm(page: Page, job: Job): Promise<FieldsDump> {
     d = await dump(page);
   }
   // A careers page that shows the job without the form: go to the board's own form for the same posting.
-  const fallback = !isApplicationForm(d) && !d.hasPassword ? greenhouseFallbackUrl(job) : null;
+  const fallback = !isApplicationForm(d) && !d.hasPassword ? await greenhouseFormFor(job) : null;
   if (fallback) {
     await goto(page, fallback);
     d = await dump(page);

@@ -112,11 +112,4 @@ describe("applyUrlFor", () => {
     expect(applyUrlFor({ ats: "ashby", url: "https://jobs.ashbyhq.com/cohere/8c035d3d-081d-4c8a-914a-72f4efaad254" })).toBe("https://jobs.ashbyhq.com/cohere/8c035d3d-081d-4c8a-914a-72f4efaad254/application");
     expect(applyUrlFor({ ats: "other", url: "https://x/y" })).toBe("https://x/y");
   });
-  it("finds the board's own form for a job linked through a careers page, when the source names the board", async () => {
-    const { greenhouseFallbackUrl } = await import("../src/jobs/normalize.js");
-    const viaCareers = { ats: "greenhouse" as const, url: "https://www.acme.com/careers/roles?gh_jid=123456" };
-    expect(greenhouseFallbackUrl({ ...viaCareers, source: "simplify-newgrad+greenhouse:acme" })).toBe("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=123456");
-    expect(greenhouseFallbackUrl({ ...viaCareers, source: "simplify-newgrad" })).toBeNull();
-    expect(greenhouseFallbackUrl({ ats: "lever", url: "https://jobs.lever.co/acme/x", source: "lever:acme" })).toBeNull();
-  });
 });
