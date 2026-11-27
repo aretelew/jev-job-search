@@ -98,7 +98,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 31;
+const PLAN_VERSION = 32;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -375,7 +375,9 @@ export function questionsFor(fields: DumpedField[]): Questions {
     const i = fields.indexOf(f);
     const before = fields.slice(Math.max(0, i - 2), i).map((p) => p.label).filter(Boolean);
     const context = before.length ? ` (directly after the fields ${before.map((b) => `"${b.slice(0, 40)}"`).join(" and ")})` : "";
-    const title = `Field "${f.label || f.placeholder || f.name}"${section}${context}${f.hint ? ` (${f.hint.slice(0, 120)})` : ""}${f.required ? ", required" : ", optional"}`;
+    // Several boxes under one label ("Address": street, city, state, postal) differ only by what each box shows inside it.
+    const shows = f.label && f.placeholder && f.placeholder.trim().toLowerCase() !== f.label.trim().toLowerCase() ? ` (the box shows "${f.placeholder.slice(0, 60)}")` : "";
+    const title = `Field "${f.label || f.placeholder || f.name}"${shows}${section}${context}${f.hint ? ` (${f.hint.slice(0, 120)})` : ""}${f.required ? ", required" : ", optional"}`;
     if (f.kind === "email" || f.kind === "tel") continue; // fixed by the input type; see planField
     const restricted = KEYS_BY_KIND[f.kind];
     if (restricted) {

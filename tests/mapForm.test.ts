@@ -74,6 +74,13 @@ describe("questionsFor", () => {
     expect(q.f2?.type).toBe("noul");
     expect(q.f3).toBeUndefined();
   });
+  it("tells apart boxes under one label by what each box shows inside it", () => {
+    const q = questionsFor([field({ id: "c", kind: "text", label: "Address", placeholder: "City" }), field({ id: "s", kind: "text", label: "Address", placeholder: "State/Province" }), field({ id: "n", kind: "text", label: "City", placeholder: "city" })]);
+    const asked = (id: string) => (q[id] as { instructions: string }).instructions;
+    expect(asked("s")).toContain('Field "Address" (the box shows "State/Province")');
+    expect(asked("c")).toContain('(the box shows "City")');
+    expect(asked("n")).not.toContain("the box shows");
+  });
   it("does not ask about tel and email inputs, and restricts url inputs to link keys", () => {
     const q = questionsFor([field({ id: "t", kind: "tel", label: "Phone Number" }), field({ id: "e", kind: "email", label: "Email" }), field({ id: "u", kind: "url", label: "LinkedIn" })]);
     expect(q.t).toBeUndefined();
