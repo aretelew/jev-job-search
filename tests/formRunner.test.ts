@@ -310,6 +310,9 @@ describe("one item of a list of several", () => {
     expect(sameItem(["TypeScript"], "Python")).toBeNull();
     expect(sameItem(["Python IDLE", "Python Scripting"], "Python")).toBeNull();
     expect(sameItem(["SQL Script", "SQL"], "SQL")).toBe("SQL");
+    // A ".net" names a framework of its own, so "Java" is never "Java.net".
+    expect(sameItem(["Java.net", "JavaScript", "Java (Programming Language)"], "Java")).toBe("Java (Programming Language)");
+    expect(sameItem(["Java.net"], "Java")).toBeNull();
   });
 });
 

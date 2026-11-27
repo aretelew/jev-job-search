@@ -108,6 +108,19 @@ async function sketch(page: Page, selector: string): Promise<void> {
   if (process.env.AWJ_TRACE) trace(`  ${selector}: ${await page.awj<string>("sketch", selector).catch(() => "no sketch")}`);
 }
 
+/**
+ * Empties the search text of a box that has the keyboard, so the next search starts clean. A search
+ * box keeps what was typed after a pick (Workday's skills), and the next item would be typed onto it.
+ * A click on a row can take the keyboard out of the box, so it is put back first. Only typed text
+ * goes: in an empty box a Backspace takes off the last item picked.
+ */
+async function clearSearch(page: Page, selector: string): Promise<void> {
+  if (!(await page.awj<boolean>("focus", selector).catch(() => false))) return;
+  if (!((await page.awj<number>("searchLength", selector).catch(() => 0)) > 0)) return;
+  await page.evaluate("window.__awj.selectAll()");
+  await page.key("Backspace");
+}
+
 async function closeDropdown(page: Page): Promise<void> {
   await page.key("Escape");
   await page.evaluate("window.__awj.blur()");
@@ -219,11 +232,23 @@ export function fillDropdownByClicking(page: Page, selector: string, value: stri
   return inFront(page, () => clickAndPick(page, selector, value, hints, out));
 }
 
-/** The option that is the wanted item itself: the same words, or the same words with an ending that names nothing new ("React.js", "C (Programming Language)"). Never another thing that starts the same ("C#", "Python IDLE"). */
+/**
+ * What may follow an item's own words in an option that is still that item: ".js" ("React.js") or a
+ * bracketed note ("C (Programming Language)"). Anything else is another thing that starts the same
+ * ("C#", "Python IDLE", "Java.net": a ".net" names a framework of its own).
+ */
+const SAME_ITEM_ENDING = /^(\.js$| \()/;
+
+/** The option that is the wanted item itself: the same words, or the same words and an ending that names nothing new (SAME_ITEM_ENDING). */
 export function sameItem(options: string[], item: string): string | null {
   const want = norm(item);
-  const fits = options.filter((o) => norm(o) === want || (norm(o).startsWith(want) && /^(\.[a-z]{1,4}$| \()/.test(norm(o).slice(want.length))));
+  const fits = options.filter((o) => norm(o) === want || (norm(o).startsWith(want) && SAME_ITEM_ENDING.test(norm(o).slice(want.length))));
   return fits.sort((a, b) => a.length - b.length)[0] ?? null;
+}
+
+/** Where to click to take off an item a search-and-pick box holds that is none of the wanted ones, by the same rule as sameItem. Not ok when there is none. */
+export function stalePill(page: Page, selector: string, items: string[]): Promise<Point> {
+  return page.awj<Point>("stalePill", selector, items, SAME_ITEM_ENDING.source);
 }
 
 /**
@@ -234,7 +259,7 @@ export function sameItem(options: string[], item: string): string | null {
 async function pickMany(page: Page, selector: string, items: string[], out?: Picked): Promise<string | null> {
   const held = async () => ((await shownValues(page, [selector]))[0] ?? "").split(/\s*,\s*/).filter(Boolean);
   for (let i = 0; i < FORM.maxListPicks * 2; i++) {
-    const p = await page.awj<Point>("stalePill", selector, items);
+    const p = await stalePill(page, selector, items);
     if (!p.ok) break;
     await page.click(p.x, p.y);
     await sleep(BROWSER.pollMs * 2);
@@ -243,6 +268,7 @@ async function pickMany(page: Page, selector: string, items: string[], out?: Pic
     if (sameItem(await held(), item)) continue;
     if (!(await openDropdown(page, selector))) return "control not found";
     if (!(await page.awj<boolean>("hasFocus", selector)) && !(await page.awj<boolean>("focus", selector))) break;
+    await clearSearch(page, selector);
     await page.type(item);
     await page.key("Enter");
     const opts = await waitOptions(page, selector, true, (seen) => sameItem(seen, item) !== null);
@@ -252,7 +278,7 @@ async function pickMany(page: Page, selector: string, items: string[], out?: Pic
       await page.click(p.x, p.y);
       await sleep(BROWSER.pollMs);
     }
-    if (await page.awj<boolean>("hasFocus", selector)) for (let i = 0; i < item.length; i++) await page.key("Backspace");
+    await clearSearch(page, selector);
     await closeDropdown(page);
   }
   const now = await held();
@@ -284,13 +310,14 @@ async function clickAndPick(page: Page, selector: string, whole: string, hints: 
       if (!typed) continue;
       // Keys go wherever the focus is. A click that did not put it in this box (the window was still coming to the front) is made good here.
       if (!(await page.awj<boolean>("hasFocus", selector)) && !(await page.awj<boolean>("focus", selector))) break;
+      await clearSearch(page, selector);
       await page.type(typed);
       if (await page.awj<boolean>("searchesOnEnter", selector)) await page.key("Enter");
       // The first word only widens the search. The pick still has to match the whole value.
       opts = await waitOptions(page, selector, true, (seen) => pickOption(seen, value, hints) !== null);
       choice = pickOption(opts, value, hints);
       if (choice) break;
-      for (let i = 0; i < typed.length; i++) await page.key("Backspace");
+      await clearSearch(page, selector);
     }
   }
   if (!choice) {
@@ -356,7 +383,10 @@ async function clickAndPick(page: Page, selector: string, whole: string, hints: 
     choice = next;
     shown = (await shownValues(page, [selector]))[0] ?? "";
   }
-  if (await page.awj<boolean>("searchesOnEnter", selector)) await closeDropdown(page);
+  if (await page.awj<boolean>("searchesOnEnter", selector)) {
+    await clearSearch(page, selector);
+    await closeDropdown(page);
+  }
   if (shown && !showsValue(choice, shown)) return `the list shows "${shown.slice(0, 40)}" after "${choice}" was clicked`;
   if (out) out.picked = choice;
   return null;

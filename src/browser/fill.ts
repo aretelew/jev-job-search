@@ -10,7 +10,7 @@ import type { Profile } from "../profile/schema.js";
 import { sleep, type Page } from "./cdp.js";
 import { pickDate } from "./calendar.js";
 import { showsPicked, showsValue } from "../util/dates.js";
-import { fillDropdown, fillDropdownByClicking } from "./dropdowns.js";
+import { fillDropdown, fillDropdownByClicking, stalePill } from "./dropdowns.js";
 import { showsEvery, showsPlanned, type Failure, type Fill } from "./report.js";
 import { controlStates, inFront, script, shownValues, trace, type Point } from "./session.js";
 
@@ -32,7 +32,7 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
   const stale = new Set<string>();
   for (const f of wanted) {
     const items = f.kind === "combobox" ? (f.values ?? f.value.split(/\s*,\s*/).filter(Boolean)) : [];
-    if (items.length > 2 && (await page.awj<Point>("stalePill", f.selector, items).catch(() => ({ x: 0, y: 0, ok: false }))).ok) stale.add(f.selector);
+    if (items.length > 2 && (await stalePill(page, f.selector, items).catch(() => ({ x: 0, y: 0, ok: false }))).ok) stale.add(f.selector);
   }
   const fills = wanted.filter((f, i) => stale.has(f.selector) || !rightAlready(f, before[i] ?? ""));
   if (fills.length < wanted.length) trace(`${wanted.length - fills.length} of ${wanted.length} box(es) already show their value and are left alone`);

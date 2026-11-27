@@ -4,9 +4,7 @@
  * password box takes the password and gives nothing back, and a verification link that hops to
  * another site is stopped at the hop. Skipped where Chrome is not installed.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -17,54 +15,35 @@ import { loadAccounts } from "../src/accounts/config.js";
 import type { Adapter, AuthPage, Verifier } from "../src/accounts/provider.js";
 import { itemFor, MemoryStore } from "../src/accounts/secrets.js";
 import { workday } from "../src/accounts/workday.js";
-import { Page, sleep, type Target } from "../src/browser/cdp.js";
+import { sleep } from "../src/browser/cdp.js";
 import { dump, goto, install } from "../src/browser/session.js";
-import { ACCOUNTS, BROWSER, childEnv } from "../src/config.js";
+import { ACCOUNTS, BROWSER } from "../src/config.js";
+import { startChrome, type TestChrome } from "./helpers/chrome.js";
 import { startMockBoard, type MockBoard } from "./helpers/workdayMock.js";
 
 // Made up for the test, and sent only to a server on this machine.
 const EMAIL = "candidate@example.com";
 const PASSWORD = "Fake-Pass-123!";
 
-const freePort = () =>
-  new Promise<number>((resolve) => {
-    const s = createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const port = (s.address() as { port: number }).port;
-      s.close(() => resolve(port));
-    });
-  });
-
 describe.skipIf(!existsSync(BROWSER.chromePath))("the sign-in in a real browser", () => {
-  let chrome: ChildProcess;
-  let port = 0;
-  let profile = "";
+  let chrome: TestChrome;
   const boards: MockBoard[] = [];
 
   beforeAll(async () => {
-    port = await freePort();
-    profile = mkdtempSync(path.join(tmpdir(), "jev-chrome-"));
-    chrome = spawn(BROWSER.chromePath, ["--headless=new", `--remote-debugging-port=${port}`, "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore", env: childEnv() });
-    for (let i = 0; i < 80; i++) {
-      if (await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)) return;
-      await sleep(250);
-    }
-    throw new Error("headless Chrome did not start");
+    chrome = await startChrome();
   }, 30_000);
 
   afterAll(async () => {
-    chrome?.kill();
+    // Chrome goes first: a board waits for the connections Chrome holds open before it closes.
+    await chrome?.close();
     await Promise.all(boards.map((b) => b.close()));
-    await sleep(300);
-    rmSync(profile, { recursive: true, force: true });
   });
 
   /** A fresh, private tab on a fresh mock board, with the adapter pointed at that board. */
   async function open(opts: { verifies?: boolean } = {}) {
     const board = await startMockBoard(opts);
     boards.push(board);
-    const context = (await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json()) as Target;
-    const page = await Page.attach(context);
+    const page = await chrome.tab();
     await page.send("Network.clearBrowserCookies");
     const dir = mkdtempSync(path.join(tmpdir(), "jev-auth-"));
     const files = { accounts: path.join(dir, "accounts.json"), state: path.join(dir, "state.json") };

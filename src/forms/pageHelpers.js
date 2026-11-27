@@ -187,6 +187,12 @@
       const a = document.activeElement;
       if (a && typeof a.select === "function") a.select();
     },
+    /** How many characters of search text the box holds while it has the keyboard. Only the count; never a password or code box. */
+    searchLength(sel) {
+      const a = document.activeElement;
+      if (!a || a.tagName !== "INPUT" || a.type === "password" || a.autocomplete === "one-time-code" || !this.hasFocus(sel)) return 0;
+      return a.value.length;
+    },
     options(sel) {
       return optionEls(sel).map(text);
     },
@@ -253,12 +259,14 @@
      * Where to click to take off one picked item of a search-and-pick box that is none of the wanted ones:
      * a whole list typed in as one item on an earlier visit, say. Not ok when every picked item is wanted.
      */
-    stalePill(sel, wanted) {
+    stalePill(sel, wanted, ending) {
       const el = q(sel);
       const prompt = el && el.closest(PROMPT);
       if (!prompt) return { x: 0, y: 0, ok: false };
       const names = wanted.map((w) => w.toLowerCase().trim()).filter(Boolean);
-      const isWanted = (t) => !t.includes(",") && names.some((w) => t === w || (t.startsWith(w) && /^(\.[a-z]{1,4}$| \()/.test(t.slice(w.length))));
+      // `ending` is sameItem's rule (dropdowns.ts), given by the runner: "React.js" is React, "Java.net" is not Java.
+      const same = new RegExp(ending);
+      const isWanted = (t) => !t.includes(",") && names.some((w) => t === w || (t.startsWith(w) && same.test(t.slice(w.length))));
       const pill = [...prompt.querySelectorAll('[data-automation-id="selectedItem"]')].find((p) => visible(p) && !isWanted(text(p).toLowerCase()));
       const charm = pill ? pill.querySelector('[data-automation-id="DELETE_charm"]') : null;
       return charm && visible(charm) ? center(charm) : { x: 0, y: 0, ok: false };
