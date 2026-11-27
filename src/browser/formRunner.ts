@@ -407,6 +407,8 @@ async function secondLook(page: Page, jev: JevClient, profile: Profile, job: Job
     // A second answer replaces the first only when it produced a value.
     if (first && (p.action === "fill" || first.action === "fill")) plan.fields[i] = { ...p, id: first.id, note: p.note ?? "settled on a second look" };
   }
+  // What the second look's lists took is what they show from now on, as for the first fill.
+  notePicks(plan, second.fills);
   const settled = new Set(second.fills.map((f) => f.selector));
   plan.reviews = [...plan.reviews.filter((r) => !settled.has(r.selector)), ...second.reviews.filter((r) => !plan.reviews.some((x) => x.selector === r.selector))];
   plan.jevCostUsd += second.jevCostUsd;

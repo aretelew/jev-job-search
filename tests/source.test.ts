@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ProfileSchema, type Profile } from "../src/profile/schema.js";
-import { gateAnswer, planField, sourceHold } from "../src/forms/mapForm.js";
+import { alternatesFor, gateAnswer, planField, sourceHold, sourcePlan } from "../src/forms/mapForm.js";
 import type { DumpedField } from "../src/forms/fields.js";
 import type { Job } from "../src/jobs/normalize.js";
 
@@ -42,6 +42,41 @@ describe("how the candidate heard about the job", () => {
     const standing: Profile = { ...online, answers: [...online.answers, { question: "How did you hear about the job?", answer: "Indeed" }] };
     expect(sourceHold(heard, "Indeed", standing, job)).toBeNull();
     expect(sourceHold(heard, "Glassdoor", standing, job)).not.toBeNull();
+  });
+
+  it("offers a list without the profile's wording Other, then the sources the person named", () => {
+    const rule = { question: "How did you hear about the job?", answer: "Use the actual source of the posting. Do not claim a named source unless it is known." };
+    const fallback = { question: "How did you hear about us, when the list offers nothing generic?", answer: "LinkedIn" };
+    const withFallback: Profile = { ...online, answers: [...online.answers, rule, fallback] };
+    expect(alternatesFor({ key: "how_did_you_hear", kind: "combobox" }, withFallback)).toEqual({ alternates: ["Other", "LinkedIn"] });
+    expect(alternatesFor({ key: "how_did_you_hear", kind: "combobox" }, { ...online, answers: [...online.answers, rule] })).toEqual({ alternates: ["Other"] });
+    // The value already tried is not offered again.
+    expect(alternatesFor({ key: "how_did_you_hear", kind: "combobox", value: "Other" }, withFallback)).toEqual({ alternates: ["LinkedIn"] });
+    // A box that takes any text gets the profile's own words.
+    expect(alternatesFor({ key: "how_did_you_hear", kind: "text" }, withFallback)).toEqual({});
+  });
+
+  it("is answered in code from a list: a choice that names nobody, under a heading its Other", () => {
+    const fallback: Profile = { ...online, answers: [...online.answers, { question: "How did you hear about us, when the list offers nothing generic?", answer: "LinkedIn" }] };
+    const list = (labels: string[]) => ({ ...heard, options: labels.map((l) => ({ value: l, label: l })) });
+    // Two real Workday lists, their first level.
+    const motorola = list(["Campus/University", "EMEAInternetJobSites", "Events", "Job Board/Website", "Other", "Social Media"]);
+    const signet = list(["Advertising", "Agency", "Internal Associate", "Job Boards", "Open House/Career Fair", "Referral", "Social Media", "United Way"]);
+    expect(sourcePlan(motorola, fallback, job)).toMatchObject({ action: "fill", key: "how_did_you_hear", value: "Job Board/Website > Other", confidence: 1 });
+    expect(sourcePlan(signet, fallback, job)).toMatchObject({ value: "Job Boards > Other" });
+    expect(sourcePlan(list(["Other", "Referral"]), fallback, job)).toMatchObject({ value: "Other" });
+    expect(sourcePlan(list(["Acme Careers Site", "Referral"]), fallback, job)).toMatchObject({ value: "Acme Careers Site > Other" });
+    // Nothing generic: the source the person named, as the list writes it if it has it.
+    expect(sourcePlan(list(["Referral", "Linkedin", "Career Fair"]), fallback, job)).toMatchObject({ value: "LinkedIn", note: "the source the person named" });
+    expect(sourcePlan(list(["Referral", "Social Media"]), fallback, job)).toMatchObject({ value: "LinkedIn" });
+    // A path under this list's own heading was given for this form, and comes first.
+    const forSignet: Profile = { ...fallback, answers: [...fallback.answers, { question: "How Did You Hear About Us?", answer: "Job Boards > Indeed" }] };
+    expect(sourcePlan(signet, forSignet, job)).toMatchObject({ value: "Job Boards > Indeed", note: "the source the person named" });
+    expect(sourcePlan(motorola, forSignet, job)).toMatchObject({ value: "Job Board/Website > Other" });
+    // Nothing generic and nothing named: JEV and the writer, and the person, as before.
+    expect(sourcePlan(list(["Referral", "Career Fair"]), online, job)).toBeNull();
+    expect(sourcePlan({ ...motorola, kind: "text" }, fallback, job)).toBeNull();
+    expect(sourcePlan({ ...list(["Job Board", "Other"]), label: "Which job board do you use most?" }, fallback, job)).toBeNull();
   });
 
   it("leaves other questions alone", () => {

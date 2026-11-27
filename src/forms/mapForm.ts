@@ -93,7 +93,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 21;
+const PLAN_VERSION = 25;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -246,6 +246,38 @@ const GENERIC_SOURCE = /^(?:other(?: source)?|online|internet|web|website|search
  */
 const saidAbout = (profile: Profile, about: (question: string) => boolean): string[] => profile.answers.filter((a) => about(a.question)).map((a) => a.answer);
 
+const sourceWords = (s: string) => s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+/** True for a source that names nobody (GENERIC_SOURCE), the employer's own name read as "company". */
+const isGenericSource = (s: string, job: Job) => {
+  const w = sourceWords(s);
+  const company = sourceWords(job.company);
+  return GENERIC_SOURCE.test(company ? w.replace(company, "company").trim() : w);
+};
+/** The sources the person named in their standing answers, in order. A short answer is a name ("LinkedIn"); a longer one is a rule for the writer. */
+const namedSources = (profile: Profile) => saidAbout(profile, (q) => SOURCE_Q.test(q)).filter((a) => a.trim().split(/\s+/).length <= FORM.maxSourceWords);
+
+/**
+ * "How did you hear about us" as a list, answered in code. First a source the person gave as a path
+ * under one of this list's own headings ("Job Boards > Indeed"): that was given for this form. Then
+ * the first option that names nobody, and under a heading its "Other" ("Job Boards > Other"; a plain
+ * option takes the path as itself). With none, the first source the person named. JEV is not asked:
+ * a heading looks to it like an answer. What the list turns out not to have, the filler tries again
+ * with alternatesFor.
+ */
+export function sourcePlan(f: DumpedField, profile: Profile, job: Job): PlannedField | null {
+  if (f.kind !== "combobox" || !SOURCE_Q.test(f.label) || !hasChoosableOptions(f)) return null;
+  const labels = f.options.map((o) => o.label.trim()).filter((l) => l && !/^select\b/i.test(l));
+  const offered = (s: string) => labels.some((l) => sourceWords(l) === sourceWords(s));
+  const named = namedSources(profile);
+  const forThisList = named.find((n) => CHOICE_PATH.test(n) && offered(n.split(CHOICE_PATH)[0] ?? ""));
+  const generic = labels.find((l) => isGenericSource(l, job));
+  const genericChoice = generic && (/^other\b/i.test(generic) ? generic : `${generic} > Other`);
+  const value = forThisList ?? genericChoice ?? named.find(offered) ?? named[0];
+  if (!value) return null;
+  const base = { id: f.id, selector: f.selector, kind: f.kind, label: f.label, required: f.required, optionLabel: null as string | null };
+  return { ...base, action: "fill", key: "how_did_you_hear", value, confidence: 1, note: value === genericChoice ? "a source that names nobody" : "the source the person named" };
+}
+
 /**
  * Why an answer to "how did you hear about us" may not go in: it names a source (a site, a referral,
  * an event) the person did not give. Each step of a path ("Job Board > Other") is checked. A source
@@ -253,14 +285,12 @@ const saidAbout = (profile: Profile, about: (question: string) => boolean): stri
  */
 export function sourceHold(f: Gated, value: string, profile: Profile, job: Job): string | null {
   if (!SOURCE_Q.test(f.label)) return null;
-  const words = (s: string) => s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
   const theirs = [profile.preferences.howDidYouHear, ...saidAbout(profile, (q) => SOURCE_Q.test(q))];
-  const own = new Set(theirs.flatMap((s) => s.split(CHOICE_PATH)).map(words).filter(Boolean));
-  const company = words(job.company);
-  const steps = value.split(CHOICE_PATH).map((s) => words(s)).filter(Boolean);
+  const own = new Set(theirs.flatMap((s) => s.split(CHOICE_PATH)).map(sourceWords).filter(Boolean));
+  const steps = value.split(CHOICE_PATH).map(sourceWords).filter(Boolean);
   // The person's own source, under whatever heading the list files it ("Social Media > LinkedIn").
   if (own.has(steps[steps.length - 1] ?? "")) return null;
-  const named = steps.filter((s) => !own.has(s) && !GENERIC_SOURCE.test(company ? s.replace(company, "company").trim() : s));
+  const named = steps.filter((s) => !own.has(s) && !isGenericSource(s, job));
   return named.length ? `"${value.slice(0, 40)}" names a source the profile does not give. Only an online posting, the employer's site or other is known; set preferences.howDidYouHear if it was somewhere else` : null;
 }
 
@@ -457,12 +487,20 @@ export function isSlotChoice(f: DumpedField): boolean {
 const SIGNATURE_LABEL = /\bNDA\b|non-?disclosure|e-?signature|electronic signature|(typ(e|ing)|enter(ing)?) your (full |legal )*name/i;
 
 /**
- * Other wordings a list may know a planned value by. Today that is the field of study, whose other
- * names the profile gives. Only a list gets them: a box that takes any text is given the profile's own word.
+ * Other wordings a list may know a planned value by, tried in order when it has no such choice. The
+ * field of study: the other names the profile gives. How the candidate heard of the job: "Other", then
+ * the sources the person named in a standing answer (a short answer is a name; a longer one is a rule
+ * for the writer). Only a list gets them: a box that takes any text is given the profile's own word.
+ * The value itself is never offered again.
  */
-export function alternatesFor(p: Pick<PlannedField, "key" | "kind">, profile: Profile): { alternates?: string[] } {
-  const also = p.key === "major" && p.kind === "combobox" ? profile.education[0]?.fieldAlso : undefined;
-  return also?.length ? { alternates: also } : {};
+export function alternatesFor(p: Pick<PlannedField, "key" | "kind"> & { value?: string | null }, profile: Profile): { alternates?: string[] } {
+  if (p.kind !== "combobox") return {};
+  const also = (
+    p.key === "major" ? (profile.education[0]?.fieldAlso ?? []) :
+    p.key === "how_did_you_hear" ? ["Other", ...namedSources(profile)] :
+    []
+  ).filter((a, i, all) => a !== p.value && all.indexOf(a) === i);
+  return also.length ? { alternates: also } : {};
 }
 
 let plans: KeyedCache<FillPlan> | null = null;
@@ -497,7 +535,7 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
   const resolvedInCode = new Set<string>();
   dump.fields.forEach((f, i) => {
     const above = dump.fields.slice(Math.max(0, i - 8), i);
-    const p = employmentDatePlan(f, above, profile) ?? (sectionOf(above) === "employment" ? null : educationDatePlan(f, dump.fields.slice(Math.max(0, i - 4), i), profile));
+    const p = sourcePlan(f, profile, job) ?? employmentDatePlan(f, above, profile) ?? (sectionOf(above) === "employment" ? null : educationDatePlan(f, dump.fields.slice(Math.max(0, i - 4), i), profile));
     if (p) {
       planned.push(p);
       resolvedInCode.add(f.id);

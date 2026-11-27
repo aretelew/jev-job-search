@@ -257,6 +257,8 @@ export const FORM = {
   maxListLevels: 2,
   /** How many items of a list of several (skills) are searched for and picked in a box that takes many. */
   maxListPicks: 8,
+  /** A standing answer to "how did you hear about us" this short is a source's name ("LinkedIn"), tried on a list that has no generic choice; a longer one is a rule for the writer. */
+  maxSourceWords: 4,
   /** How many extra copies of an attached file are taken off a form that kept them from earlier visits. */
   maxExtraCopies: 5,
   /** How many screens of a list that only draws the rows in view are gone through, and how many of its choices are named when none fits. */

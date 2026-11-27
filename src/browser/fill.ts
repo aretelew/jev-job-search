@@ -149,7 +149,8 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
   return failed;
 }
 
-const NO_SUCH_CHOICE = /^no option matches/;
+/** A list that does not have the value: no option matches it, or the heading it led to opens a list without it. Then the value's other wordings are tried. */
+const NO_SUCH_CHOICE = /^no option matches|opens a list of its own/;
 
 export const TYPED_KINDS = new Set(["text", "email", "tel", "url", "number", "textarea"]);
 
