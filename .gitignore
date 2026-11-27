@@ -17,6 +17,7 @@ data/queue.json.bak
 data/accounts.json
 data/policy.json
 data/gmail.json
+data/outreach.json
 data/cache/
 data/runs/
 documents/*

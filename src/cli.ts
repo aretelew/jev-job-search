@@ -53,6 +53,7 @@ import { startReportServer } from "./report/server.js";
 import { endIfAbandoned, noteApplied, pipeline, reconcile, recordApplied, resolvePage, resume, submitAndRecord, sweep, takeJobs } from "./run/pipeline.js";
 import { brief, printFill, printTable } from "./run/print.js";
 import { limiter } from "./util/pace.js";
+import { OUTREACH_ACTIONS, outreachCommand, type OutreachOptions } from "./outreach/commands.js";
 
 loadEnv();
 installRedaction();
@@ -691,6 +692,17 @@ program
     });
     console.log(`${e.job.company} | ${e.job.title} → ${status}${o.reason ? ` (${o.reason})` : ""}`);
   });
+
+// ------------------------------------------------------------ outreach
+
+program
+  .command("outreach <action> [args...]")
+  .description(`Find people on LinkedIn to write to about a job you applied to, and draft the notes. You send them. ${OUTREACH_ACTIONS}`)
+  .option("--accept-risk", "with signin: you read the risk note and want outreach")
+  .option("--again", "with find: look at a job again even if outreach already did")
+  .option("--job <id>", "with list: only this job")
+  .option("--json")
+  .action((action: string, args: string[], o: OutreachOptions) => outreachCommand(action, args, o, { inRun, say: (l) => console.log(l), progress: (l) => console.error(l) }));
 
 // ------------------------------------------------------------- the records
 

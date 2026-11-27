@@ -1,0 +1,18 @@
+{
+  "_about": "LinkedIn people-search result cards in the shape READ_EXPR returns them, captured 2026-11-26 and then made up: every name, profile link, headline, place and summary here is invented. Only the layout of the lines is real.",
+  "url": "https://www.linkedin.com/search/results/people/?currentCompany=%5B%221234%22%5D&keywords=recruiter",
+  "title": "Search | LinkedIn",
+  "text": "Hiring? Automatically find qualified people with advanced filters",
+  "companyLinks": [],
+  "employeeSearch": null,
+  "cards": [
+    { "href": "https://www.linkedin.com/in/example-avery-stone/", "name": "Avery Stone", "lines": ["Avery Stone", "• 3rd+", "University Recruiting at Acme Robotics", "San Francisco Bay Area", "11,824 followers", "See open roles"] },
+    { "href": "https://www.linkedin.com/in/example-jordan-lee-1a2b3c/", "name": "Jordan Lee", "lines": ["Jordan Lee • 3rd+", "Senior Software Engineer at Acme Robotics", "San Francisco, California, United States", "Message", "Senior Software Engineer at Acme Robotics since August 2019, working on payments across 40 countries; MS in Computer Science from University of Alberta. You both went to University of Alberta."] },
+    { "href": "https://www.linkedin.com/in/example-riley-park/", "name": "Riley Park", "lines": ["Riley Park", "• 2nd", "Developer Advocate @Acme Robotics", "Seattle, Washington, United States", "Follow", "Casey Morgan is a mutual connection", " · 14,067 followers"] },
+    { "href": "https://www.linkedin.com/in/example-sam-quinn/", "name": "Sam Quinn", "lines": ["Sam Quinn", "• 2nd", "Talent Partner at Other Corp", "Austin, Texas, United States", "Connect", "At Acme Robotics from January 2021 to December 2025 across Technical Sourcer and Senior Sourcing Lead roles.", "Casey Morgan, Drew Hale & 4 other mutual connections"] },
+    { "href": "https://www.linkedin.com/in/example-taylor-reed/", "name": "Taylor Reed", "lines": ["Taylor Reed", "3rd+ degree connection", "· 3rd", "Engineering Manager, Platform at Acme Robotics", "Message"] },
+    { "href": "https://www.linkedin.com/in/example-morgan-ash/", "name": "Morgan Ash", "lines": ["Morgan Ash", "• 1st", "Co-founder and CEO at Acme Robotics", "San Francisco, California, United States", "Message"] },
+    { "href": "https://www.linkedin.com/search/results/people/headless?origin=X", "name": "LinkedIn Member", "lines": ["LinkedIn Member", "Software Engineer at Acme Robotics"] },
+    { "href": "https://www.linkedin.com/in/example-hidden/", "name": "LinkedIn Member", "lines": ["LinkedIn Member", "Software Engineer at Acme Robotics"] }
+  ]
+}

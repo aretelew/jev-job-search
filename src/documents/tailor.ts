@@ -72,21 +72,30 @@ const REVIEW_RULES = [
 ];
 
 /**
+ * What in any short text reads as machine-written: a stock phrase, a dash used as punctuation, an
+ * exclamation mark, a semicolon, a sentence that runs on. `body` is the part whose sentences are
+ * measured (a letter's paragraphs, without its greeting and sign-off); it is the whole text when not given.
+ */
+export function tellsIn(text: string, body = text): string[] {
+  const lower = text.toLowerCase();
+  const tells: string[] = DOCUMENTS.machinePhrases.filter((p) => lower.includes(p)).map((p) => `the phrase "${p}"`);
+  if (/[\u2014\u2013]|\s-\s/.test(text)) tells.push("a dash used as punctuation");
+  if (text.includes("!")) tells.push("an exclamation mark");
+  if (/[;]/.test(text)) tells.push("a semicolon");
+  const sentences = body.split(/(?<=[.?])\s+/).filter(Boolean);
+  const long = sentences.filter((s) => s.split(/\s+/).length > DOCUMENTS.maxSentenceWords);
+  if (long.length) tells.push(`${long.length} sentence(s) over ${DOCUMENTS.maxSentenceWords} words`);
+  return tells;
+}
+
+/**
  * What in a cover letter reads as machine-written: a stock phrase, a dash used as punctuation, an
  * exclamation mark, a sentence that runs on, a letter that runs long. Empty when it reads as typed.
  */
 export function machineTells(t: Tailored): string[] {
   const letter = t.coverLetter;
   if (!letter) return [];
-  const text = [letter.greeting, ...letter.paragraphs, letter.closing].join("\n");
-  const lower = text.toLowerCase();
-  const tells: string[] = DOCUMENTS.machinePhrases.filter((p) => lower.includes(p)).map((p) => `the phrase "${p}"`);
-  if (/[\u2014\u2013]|\s-\s/.test(text)) tells.push("a dash used as punctuation");
-  if (text.includes("!")) tells.push("an exclamation mark");
-  if (/[;]/.test(text)) tells.push("a semicolon");
-  const sentences = letter.paragraphs.join(" ").split(/(?<=[.?])\s+/).filter(Boolean);
-  const long = sentences.filter((s) => s.split(/\s+/).length > DOCUMENTS.maxSentenceWords);
-  if (long.length) tells.push(`${long.length} sentence(s) over ${DOCUMENTS.maxSentenceWords} words`);
+  const tells = tellsIn([letter.greeting, ...letter.paragraphs, letter.closing].join("\n"), letter.paragraphs.join(" "));
   const words = letter.paragraphs.join(" ").split(/\s+/).length;
   if (words > DOCUMENTS.maxLetterWords) tells.push(`${words} words, over ${DOCUMENTS.maxLetterWords}`);
   const starts = letter.paragraphs.filter((p) => /^I\b/.test(p.trim())).length;
@@ -94,18 +103,23 @@ export function machineTells(t: Tailored): string[] {
   return tells;
 }
 
-/** The claims a draft makes that the profile does not hold: numbers, and capitalized names of tools, places and companies. */
-export function unsupportedClaims(t: Tailored, profile: Profile, posting: string): string[] {
+/**
+ * A checker of claims against the profile: numbers, and capitalized names of tools, places and
+ * companies. `other` is text the claims may also come from (a posting, the card of the person a
+ * note is written to); `check(text, false)` holds a line to the profile alone.
+ */
+function claimChecker(profile: Profile, other: string) {
   const raw = JSON.stringify({ e: profile.experience, p: profile.projects, s: profile.skills, f: profile.facts, su: profile.summary, ed: profile.education, n: profile.name, l: profile.links, a: profile.address, b: profile.answers }).toLowerCase();
   // "18,000+" in the draft and "18,000" in the profile are the same number; "REST APIs" and "REST API" the same thing.
   const corpus = `${raw} ${raw.replace(/(\d),(?=\d{3})/g, "$1")}`;
-  const postingCorpus = posting.toLowerCase();
+  const postingCorpus = other.toLowerCase();
   const plain = new Set<string>(DOCUMENTS.plainWords.map((w) => w.toLowerCase()));
   const known = (word: string, allowPosting: boolean) => {
     const forms = [word, word.replace(/s$/, ""), word.replace(/es$/, ""), `${word}s`];
     return forms.some((f) => f.length >= 2 && (corpus.includes(f) || (allowPosting && postingCorpus.includes(f))));
   };
   const bad = new Set<string>();
+  /** Notes every claim in a line. With allowPosting false, the line is held to the profile alone. */
   const check = (text: string, allowPosting: boolean) => {
     for (const n of text.match(/\d[\d,.]*\s*(?:%|k\b|\+)?/g) ?? []) {
       const digits = n.replace(/[^\d]/g, "");
@@ -122,23 +136,37 @@ export function unsupportedClaims(t: Tailored, profile: Profile, posting: string
       });
     }
   };
+  /** Notes a skill the profile does not hold. A skill is a phrase; it is the profile's when every word of it that carries meaning is. */
+  const checkSkill = (skill: string) => {
+    const words = skill.toLowerCase().split(/[^a-z0-9+#.]+/).filter((w) => w.length >= 3 && !plain.has(w));
+    if (!corpus.includes(skill.toLowerCase()) && !(words.length && words.every((w) => known(w, false)))) bad.add(skill);
+  };
+  return { check, checkSkill, note: (claim: string) => void bad.add(claim), claims: () => [...bad] };
+}
+
+/** The claims a line of free text makes that neither the profile nor `other` holds. */
+export function claimsIn(text: string, profile: Profile, other: string): string[] {
+  const c = claimChecker(profile, other);
+  c.check(text, true);
+  return c.claims();
+}
+
+/** The claims a draft makes that the profile does not hold: numbers, and capitalized names of tools, places and companies. */
+export function unsupportedClaims(t: Tailored, profile: Profile, posting: string): string[] {
+  const { check, checkSkill, note, claims } = claimChecker(profile, posting);
   check(t.headline, true);
   check(t.summary, true);
-  // A skill is a phrase; it is the profile's when every word of it that carries meaning is.
-  for (const s of t.skills) {
-    const words = s.toLowerCase().split(/[^a-z0-9+#.]+/).filter((w) => w.length >= 3 && !plain.has(w));
-    if (!corpus.includes(s.toLowerCase()) && !(words.length && words.every((w) => known(w, false)))) bad.add(s);
-  }
+  for (const s of t.skills) checkSkill(s);
   for (const e of t.experience) {
-    if (!profile.experience.some((x) => x.company.toLowerCase().includes(e.company.toLowerCase()) || e.company.toLowerCase().includes(x.company.toLowerCase()))) bad.add(`job at ${e.company}`);
+    if (!profile.experience.some((x) => x.company.toLowerCase().includes(e.company.toLowerCase()) || e.company.toLowerCase().includes(x.company.toLowerCase()))) note(`job at ${e.company}`);
     for (const b of e.bullets) check(b, false);
   }
   for (const p of t.projects) {
-    if (!profile.projects.some((x) => x.name.toLowerCase().includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(x.name.toLowerCase()))) bad.add(`project ${p.name}`);
+    if (!profile.projects.some((x) => x.name.toLowerCase().includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(x.name.toLowerCase()))) note(`project ${p.name}`);
     for (const b of p.bullets) check(b, false);
   }
   if (t.coverLetter) for (const p of t.coverLetter.paragraphs) check(p, true);
-  return [...bad];
+  return claims();
 }
 
 /** A folder name a person can read: Company_Role_id, with anything that is not a letter or a digit folded to one underscore. */
