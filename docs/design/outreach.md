@@ -1,6 +1,14 @@
-# Outreach: finding people to message about a job
+# Outreach: finding people to reach out to about a job
 
 *Design, not built. Written 2026-11-26.*
+
+> **Changed 2026-11-26, after the first live run.** The person does not want the tool to write
+> messages. Outreach now makes a list of people and nothing else: no drafts, no writer, no
+> `redraft`. The list is mostly engineers and managers, with at most `OUTREACH.maxRecruiters`
+> recruiters, up to `OUTREACH.perJob` people per job. A shared school is a bonus on any person, not
+> a kind of its own (`alum` is gone; old records read it as `team_engineer`). The list is also
+> written to `applications/people.csv` after every change. Where the text below talks about drafts,
+> notes or the writer, that part is no longer built.
 
 ## What it is for
 

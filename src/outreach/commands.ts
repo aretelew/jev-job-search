@@ -1,18 +1,15 @@
 /**
  * What the `outreach` command says and records: the risk note the person confirms once, the wait
- * for them to sign in to LinkedIn in the tool's window, the list of people and drafts, the person's
- * own marks, a note written again, and the company page they name when the run found the wrong one.
- * The browser work itself is in run.ts. Nothing here sends anything.
+ * for them to sign in to LinkedIn in the tool's window, the list of people, the person's own marks, and the company page they name when the run
+ * found the wrong one. The browser work itself is in run.ts. Nothing here sends anything, and the
+ * tool writes no message: the person reaches out in their own words.
  */
 import { OUTREACH, PATHS } from "../config.js";
-import { runWriter } from "../answers/resolve.js";
 import { closeTab, listTargets, newTab, Page, sleep } from "../browser/cdp.js";
 import { JevClient } from "../jev/client.js";
 import { loadQueue, type QueueEntry } from "../jobs/queue.js";
-import { loadProfile, type Profile } from "../profile/schema.js";
-import { writeNotes } from "./draft.js";
-import type { Card } from "./linkedin.js";
-import { followUpsDue, loadOutreach, markPerson, mutateOutreach, personById, PersonStatus, type OutreachFile, type Person } from "./records.js";
+import { loadProfile } from "../profile/schema.js";
+import { followUpsDue, loadOutreach, markPerson, mutateOutreach, PersonStatus, type OutreachFile, type Person } from "./records.js";
 import { chooseJobs, chromeBrowse, findPeople, refusal } from "./run.js";
 
 export const RISK_NOTE = [
@@ -26,7 +23,7 @@ export const RISK_NOTE = [
   "how LinkedIn spots automation. Low is not zero: if LinkedIn objects, outreach stops for good",
   "until you say otherwise.",
   "",
-  "You send every note yourself. Nothing is scheduled.",
+  "It makes a list of people. You reach out to them yourself. Nothing is scheduled.",
 ].join("\n");
 
 /** Records that the person read the risk note and wants outreach. */
@@ -75,26 +72,7 @@ export function setCompanyPage(company: string, slug: string, file: string = PAT
   }, file);
 }
 
-const cardOf = (p: Person): Card => ({ profileUrl: p.profileUrl, name: p.name, degree: p.degree, headline: p.headline, location: p.location, summary: p.summary, sharedSchool: p.warm.sharedSchool, mutuals: p.warm.mutuals, mutualLine: p.mutualLine });
-
-/** Writes one person's notes again, the same way a run does, and keeps them only if they pass the same checks. */
-export async function redraft(id: string, profile: Profile, entries: QueueEntry[], write: (prompt: string, system: string) => Promise<string>, file: string = PATHS.outreach): Promise<Person> {
-  const p = personById(loadOutreach(file), id);
-  const entry = entries.find((e) => e.job.id === p.jobId);
-  if (!entry) throw new Error(`the job this person was found for (${p.jobId}) is no longer in the queue.`);
-  const [w] = await writeNotes(profile, entry, [{ id: p.id, card: cardOf(p), kind: p.kind, why: p.why }], entry.status === "applied", write);
-  return mutateOutreach((f) => {
-    const now = personById(f, p.id);
-    now.drafts = w?.drafts ?? null;
-    now.draftNote = w?.note ?? null;
-    now.updatedAt = new Date().toISOString();
-    return { ...now };
-  }, file);
-}
-
-const indent = (text: string, pad: string) => text.split("\n").map((l) => `${pad}${l}`).join("\n");
-
-/** The people and drafts, by job, for a person to read and send from. */
+/** The people, by job, for a person to read and reach out from. */
 export function formatList(f: OutreachFile, entries: QueueEntry[], o: { jobId?: string; now?: Date } = {}): string {
   const byJob = new Map<string, Person[]>();
   for (const p of f.people) {
@@ -103,27 +81,21 @@ export function formatList(f: OutreachFile, entries: QueueEntry[], o: { jobId?: 
   }
   if (!byJob.size) return o.jobId ? `Nobody found yet for ${o.jobId}.` : "Nobody found yet. Run: outreach find";
   const out: string[] = [];
+  const line = (p: Person) => [`  ${p.id}  ${p.name}, ${p.headline}`, `      ${p.why}${p.status !== "found" ? `  [${p.status}${p.sentAt ? ` ${p.sentAt.slice(0, 10)}` : ""}]` : ""}`, ...(p.mutualLine ? [`      ${p.mutualLine}`] : []), `      ${p.profileUrl}`];
   for (const [jobId, people] of byJob) {
     const e = entries.find((x) => x.job.id === jobId);
     out.push(`== ${e ? `${e.job.company} | ${e.job.title}` : people[0]?.company ?? ""} [${jobId}]`);
-    for (const p of people.filter((x) => !x.executive)) {
-      out.push(`  ${p.id}  ${p.name}, ${p.headline}`, `      why: ${p.why}`, `      status: ${p.status}${p.sentAt ? ` (sent ${p.sentAt.slice(0, 10)})` : ""}`, `      profile: ${p.profileUrl}`);
-      if (p.drafts) {
-        if (p.drafts.connect) out.push(`      connection note (${p.drafts.connect.length} characters):`, indent(p.drafts.connect, "        "));
-        out.push("      message after they accept:", indent(p.drafts.message, "        "));
-        if (p.drafts.inmail) out.push(`      InMail, subject "${p.drafts.inmail.subject}":`, indent(p.drafts.inmail.body, "        "));
-      } else if (p.draftNote) out.push(`      ${p.draftNote}`);
-    }
+    for (const p of people.filter((x) => !x.executive)) out.push(...line(p));
     const execs = people.filter((x) => x.executive);
     if (execs.length) {
-      out.push("  Executives, left out by default (outreach redraft <id> writes a note for one):");
-      for (const p of execs) out.push(`    ${p.id}  ${p.name}, ${p.headline}`);
+      out.push("  Executives, set apart:");
+      for (const p of execs) out.push(...line(p));
     }
     out.push("");
   }
   const due = followUpsDue(f, OUTREACH.followUpDays, o.now);
-  if (due.length) out.push(`${due.length} note(s) sent over ${OUTREACH.followUpDays} days ago with no answer. One follow-up each is fair, then let it go: ${due.map((p) => p.name).join(", ")}`, "");
-  out.push("Send each note yourself from their profile. Then: outreach mark <id> sent");
+  if (due.length) out.push(`${due.length} message(s) sent over ${OUTREACH.followUpDays} days ago with no answer. One follow-up each is fair, then let it go: ${due.map((p) => p.name).join(", ")}`, "");
+  out.push(`The same list as a sheet: ${PATHS.people}`, "After you reach out to someone: outreach mark <id> sent");
   return out.join("\n");
 }
 
@@ -131,9 +103,7 @@ export type OutreachOptions = { acceptRisk?: boolean; again?: boolean; job?: str
 /** What the command needs from the CLI: the run lock with the tool's Chrome, and somewhere to print. */
 export type OutreachContext = { inRun: <T>(command: string, work: () => Promise<T>) => Promise<T>; say: (line: string) => void; progress: (line: string) => void };
 
-const write = (prompt: string, system: string) => runWriter(prompt, system, { purpose: "outreach", jobId: "outreach" });
-
-export const OUTREACH_ACTIONS = "signin | find [ids...] | list | mark <id> <status> | redraft <id> | company <employer> <page name> | resume";
+export const OUTREACH_ACTIONS = "signin | find [ids...] | list | mark <id> <status> | company <employer> <page name> | resume";
 
 /** The `outreach` command, one action at a time. */
 export async function outreachCommand(action: string, args: string[], o: OutreachOptions, ctx: OutreachContext): Promise<void> {
@@ -160,9 +130,9 @@ export async function outreachCommand(action: string, args: string[], o: Outreac
         const target = await newTab("about:blank");
         const page = await Page.attach(target);
         try {
-          const r = await findPeople(loadProfile(), jobs, { browse: chromeBrowse(page, sleep), jev: new JevClient(), write, sleep, log: ctx.progress });
+          const r = await findPeople(loadProfile(), jobs, { browse: chromeBrowse(page, sleep), jev: new JevClient(), sleep, log: ctx.progress });
           for (const j of r.jobs) say(`${j.company} | ${j.title} [${j.jobId}]: ${j.kept.length} people${j.executives ? `, ${j.executives} executive(s) set apart` : ""}${j.note ? `. ${j.note}` : ""}`);
-          say(`${r.pages} LinkedIn page(s) loaded.${r.stopped ? ` Stopped: ${r.stopped}` : ""}\nThe people and drafts: outreach list`);
+          say(`${r.pages} LinkedIn page(s) loaded.${r.stopped ? ` Stopped: ${r.stopped}` : ""}\nThe list: outreach list, or ${PATHS.people}`);
         } finally {
           page.close();
           await closeTab(target.id).catch(() => {});
@@ -171,7 +141,8 @@ export async function outreachCommand(action: string, args: string[], o: Outreac
     }
     case "list": {
       const f = loadOutreach();
-      return say(o.json ? JSON.stringify(o.job ? f.people.filter((p) => p.jobId === o.job) : f.people, null, 2) : formatList(f, loadQueue().entries, o.job ? { jobId: o.job } : {}));
+      if (o.json) return say(JSON.stringify(o.job ? f.people.filter((p) => p.jobId === o.job) : f.people, null, 2));
+      return say(formatList(f, loadQueue().entries, o.job ? { jobId: o.job } : {}));
     }
     case "mark": {
       const [id, status] = args;
@@ -179,12 +150,6 @@ export async function outreachCommand(action: string, args: string[], o: Outreac
       if (!id || !s.success) return say(`outreach mark <id> <status>, where status is one of: ${PersonStatus.options.join(", ")}`);
       const p = markPerson(id, s.data);
       return say(`${p.name} is now ${p.status}`);
-    }
-    case "redraft": {
-      const [id] = args;
-      if (!id) return say("outreach redraft <id>");
-      const p = await redraft(id, loadProfile(), loadQueue().entries, write);
-      return say(p.drafts ? `New notes for ${p.name}. outreach list --job ${p.jobId} shows them.` : `${p.name}: ${p.draftNote}`);
     }
     case "company": {
       const [company, slug] = args;

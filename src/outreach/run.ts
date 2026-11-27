@@ -1,7 +1,7 @@
 /**
  * One outreach run: for each job, find the employer on LinkedIn, read a few search pages of people
- * who work there now, ask JEV who each one is, keep a few, have the writer draft the notes, and
- * write it all down. The run loads pages and reads them, nothing more: it never clicks, types or
+ * who work there now, ask JEV who each one is, keep the ones worth reaching out to, and write them
+ * down. The person reaches out to them; the tool writes no message. The run loads pages and reads them, nothing more: it never clicks, types or
  * sends on LinkedIn. It keeps the tool's own limits (pages a day, a person's pace between pages)
  * and stops at the first page that is a sign-in, a check or a limit, and a check or a limit pauses
  * outreach until the next day. A person runs it and watches; nothing schedules it.
@@ -12,7 +12,6 @@ import type { QueueEntry } from "../jobs/queue.js";
 import { dayOfMail } from "../mail/status.js";
 import type { Profile } from "../profile/schema.js";
 import type { Page } from "../browser/cdp.js";
-import { writeNotes, type Written } from "./draft.js";
 import { companyIdFrom, companyPageUrl, companySearchUrl, companySlugFrom, pageState, parseCard, PageRead, personId, READ_EXPR, searchesFor, type Card } from "./linkedin.js";
 import { judge, pick, whyOf, type Judged } from "./rank.js";
 import { loadOutreach, mutateOutreach, type OutreachFile, type Person } from "./records.js";
@@ -25,7 +24,6 @@ export interface Browse {
 export type RunDeps = {
   browse: Browse;
   jev: Pick<JevClient, "decide">;
-  write: (prompt: string, system: string) => Promise<string>;
   sleep: (ms: number) => Promise<void>;
   now?: () => Date;
   random?: () => number;
@@ -71,7 +69,7 @@ export function chooseJobs(entries: QueueEntry[], f: OutreachFile, now: Date, na
 }
 
 /** One person found for a job, as the record keeps them. */
-export function personFrom(j: Judged, entry: QueueEntry, written: Written | undefined, executive: boolean, at: string): Person {
+export function personFrom(j: Judged, entry: QueueEntry, executive: boolean, at: string): Person {
   const c = j.card;
   return {
     id: personId(c.profileUrl),
@@ -79,17 +77,15 @@ export function personFrom(j: Judged, entry: QueueEntry, written: Written | unde
     name: c.name,
     headline: c.headline,
     location: c.location,
-    summary: c.summary,
     mutualLine: c.mutualLine,
     company: entry.job.company,
+    role: entry.job.title,
     kind: j.kind,
     degree: c.degree,
     warm: { sharedSchool: c.sharedSchool, mutuals: c.mutuals },
     executive,
     why: whyOf(j),
     jobId: entry.job.id,
-    drafts: written?.drafts ?? null,
-    draftNote: executive ? "an executive: left out by default. outreach redraft <id> writes a note if you want one" : (written?.note ?? null),
     status: "found",
     foundAt: at,
     sentAt: null,
@@ -167,14 +163,13 @@ export async function findPeople(profile: Profile, entries: QueueEntry[], deps: 
     if (!companyId) job.note = `LinkedIn had no company page that clearly matches "${entry.job.company}"`;
     else {
       const before = loadOutreach(file);
-      const judged = await judge(entry, await cardsFor(companyId, new Set(before.people.map((p) => p.profileUrl))), school, deps.jev, deps.cacheFile);
+      const judged = await judge(entry, await cardsFor(companyId, new Set(before.people.map((p) => p.profileUrl))), deps.jev, deps.cacheFile);
       const atCompany = before.people.filter((p) => p.company === entry.job.company && p.status !== "skipped" && !p.executive).length;
       const { kept, executives } = pick(judged, OUTREACH.perCompany - atCompany);
-      const written = await writeNotes(profile, entry, kept.map((j) => ({ id: personId(j.card.profileUrl), card: j.card, kind: j.kind, why: whyOf(j) })), entry.status === "applied", deps.write);
       const at = now().toISOString();
-      job.kept = kept.map((j) => personFrom(j, entry, written.find((w) => w.id === personId(j.card.profileUrl)), false, at));
+      job.kept = kept.map((j) => personFrom(j, entry, false, at));
       job.executives = executives.length;
-      people = [...job.kept, ...executives.map((j) => personFrom(j, entry, undefined, true, at))];
+      people = [...job.kept, ...executives.map((j) => personFrom(j, entry, true, at))];
       if (!kept.length) job.note = atCompany >= OUTREACH.perCompany ? `already ${atCompany} people at ${entry.job.company} in the record` : "nobody on these pages was a clear fit";
     }
     mutateOutreach((f) => {

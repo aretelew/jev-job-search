@@ -1,16 +1,14 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { OUTREACH, PATHS } from "../src/config.js";
-import { claimsIn } from "../src/documents/tailor.js";
 import type { QueueEntry } from "../src/jobs/queue.js";
 import { loadProfile } from "../src/profile/schema.js";
 import { setCompanyPage, signedInAt } from "../src/outreach/commands.js";
-import { problemsOf, writeNotes } from "../src/outreach/draft.js";
 import { companyIdFrom, companySlugFrom, leftCompany, mutualsIn, pageState, parseCard, peopleSearchUrl, profileUrlOf, READ_EXPR, searchesFor, type PageRead, type RawCard } from "../src/outreach/linkedin.js";
 import { pick, scoreOf, whyOf, type Judged } from "../src/outreach/rank.js";
-import { followUpsDue, loadOutreach, markPerson, mutateOutreach } from "../src/outreach/records.js";
+import { followUpsDue, loadOutreach, markPerson, mutateOutreach, peopleRows, PEOPLE_COLUMNS } from "../src/outreach/records.js";
 import { chooseJobs, findPeople, refusal, type Browse } from "../src/outreach/run.js";
 
 const fixture = JSON.parse(readFileSync(path.join(__dirname, "fixtures", "linkedin-cards.json"), "utf8")) as PageRead;
@@ -98,8 +96,8 @@ describe("pages, addresses and companies", () => {
 
   it("limits every search to people who work at the company now, and puts the school in", () => {
     const urls = searchesFor("1234", "University of Alberta");
-    expect(urls.map((u) => u.keywords)).toEqual([OUTREACH.searches[0], "recruiter", "software engineer", "University of Alberta", "intern"]);
-    expect(urls[0]?.keywords).toMatch(/ OR /);
+    expect(urls.map((u) => u.keywords)).toEqual(["software engineer", "engineering manager", "University of Alberta", "intern", OUTREACH.searches[4]]);
+    expect(urls[4]?.keywords).toMatch(/ OR /);
     for (const u of urls) expect(decodeURIComponent(u.url)).toContain('currentCompany=["1234"]');
     expect(searchesFor("1234", null)).toHaveLength(4);
     expect(peopleSearchUrl("1", "a b")).toBe("https://www.linkedin.com/search/results/people/?currentCompany=%5B%221%22%5D&keywords=a%20b");
@@ -129,72 +127,30 @@ describe("ranking", () => {
   const [avery, jordan, riley, , taylor, morgan] = cardsOf(fixture);
   const j = (card: unknown, kind: Judged["kind"], over: Partial<Judged> = {}): Judged => ({ card: card as Judged["card"], kind, confidence: 0.9, executive: false, ...over });
 
-  it("puts campus recruiters first and adds the warm signals", () => {
+  it("scores the kind and adds the warm signals, a shared school among them", () => {
     expect(scoreOf(j(avery, "campus_recruiter"))).toBe(OUTREACH.weights.campus_recruiter);
     expect(scoreOf(j(jordan, "team_engineer"))).toBe((OUTREACH.weights.team_engineer ?? 0) + OUTREACH.sharedSchool);
     expect(scoreOf(j(riley, "same_company"))).toBe(0);
     expect(scoreOf(j(taylor, "team_manager", { confidence: 0.3 }))).toBe(0);
     expect(whyOf(j(riley, "team_engineer"))).toBe("an engineer in the area of the role, 1 mutual connection, 2nd degree");
+    expect(whyOf(j(jordan, "team_engineer"))).toBe("an engineer in the area of the role, went to your school");
   });
 
-  it("keeps the best recruiter first, even one who ranks below the engineers", () => {
-    const judged = [j(jordan, "team_engineer"), j(riley, "team_engineer"), j(taylor, "team_manager"), j(avery, "recruiter", { confidence: 0.7 })];
-    expect(pick(judged, 3).kept.map((x) => x.card.name)).toEqual(["Avery Stone", "Jordan Lee", "Taylor Reed"]);
-    expect(pick(judged.slice(0, 3), 3).kept.map((x) => x.card.name)).toEqual(["Jordan Lee", "Taylor Reed", "Riley Park"]);
+  it("takes at most two recruiters and gives the other places to engineers and managers", () => {
+    const judged = [j(avery, "campus_recruiter"), j(riley, "recruiter"), j(morgan, "campus_recruiter"), j(jordan, "team_engineer"), j(taylor, "team_manager")];
+    const kept = pick(judged, 10).kept;
+    expect(kept.filter((x) => OUTREACH.recruiterKinds.includes(x.kind))).toHaveLength(OUTREACH.maxRecruiters);
+    expect(kept.map((x) => x.card.name)).toEqual(expect.arrayContaining(["Jordan Lee", "Taylor Reed"]));
+    expect(kept).toHaveLength(4);
   });
 
-  it("keeps a few, never more than the employer has room for, and sets executives apart", () => {
+  it("ranks best first, never more than the employer has room for, and sets executives apart", () => {
     const judged = [j(avery, "campus_recruiter"), j(jordan, "team_engineer"), j(riley, "team_engineer"), j(taylor, "team_manager"), j(morgan, "team_manager", { executive: true })];
     const all = pick(judged, 10);
-    expect(all.kept.map((x) => x.card.name)).toEqual(["Avery Stone", "Jordan Lee", "Taylor Reed", "Riley Park"]);
+    expect(all.kept.map((x) => x.card.name)).toEqual(["Jordan Lee", "Riley Park", "Avery Stone", "Taylor Reed"]);
     expect(all.executives.map((x) => x.card.name)).toEqual(["Morgan Ash"]);
     expect(pick(judged, 1).kept).toHaveLength(1);
     expect(pick(judged, 0).kept).toHaveLength(0);
-  });
-});
-
-describe("the notes", () => {
-  const [, jordan, riley] = cardsOf(fixture);
-  const good = { connect: "Hi Jordan, I just applied for the Software Engineer Intern role at Acme Robotics. I'm at University of Alberta too, and I'd like to hear how payments work there.", message: "Thanks for connecting. I built Example App on my own. Would you have fifteen minutes sometime?", inmail: null };
-
-  it("a note may use the profile, the posting and the person's own card", () => {
-    expect(problemsOf(good, jordan as never, entry(), profile)).toEqual([]);
-    // The card's own number is the card's.
-    expect(claimsIn("Payments across 40 countries sounds hard.", profile, "40 countries")).toEqual([]);
-  });
-
-  it("a note that invents a number, a company or a friend is refused, and so is the GPA", () => {
-    const bad = { ...good, message: "I scaled Example App to 90,000 users at Initech. Our friend Pat Doe said to write." };
-    const problems = problemsOf(bad, jordan as never, entry(), profile).join(" | ");
-    expect(problems).toMatch(/90,000/);
-    expect(problems).toMatch(/Initech/);
-    expect(problems).toMatch(/Pat/);
-    expect(problemsOf({ ...good, message: "My GPA is high." }, jordan as never, entry(), profile).join(" ")).toMatch(/GPA/);
-    expect(problemsOf({ ...good, connect: "x".repeat(OUTREACH.noteChars + 1) }, jordan as never, entry(), profile).join(" ")).toMatch(/over 300/);
-    expect(problemsOf({ ...good, message: "Hi! I am excited to connect." }, jordan as never, entry(), profile).length).toBeGreaterThan(0);
-  });
-
-  it("a message after they accept that says the connection note again is sent back", () => {
-    const echo = { ...good, message: "Hi Jordan, I just applied for the Software Engineer Intern role at Acme Robotics. What is a typical week like?" };
-    expect(problemsOf(echo, jordan as never, entry(), profile).join(" ")).toMatch(/repeats the connection note/);
-    expect(problemsOf(good, jordan as never, entry(), profile)).toEqual([]);
-    // Someone already connected gets one note, so there is nothing to repeat.
-    expect(problemsOf({ ...echo, connect: "" }, { ...(jordan as object), degree: 1 } as never, entry(), profile).join(" ")).not.toMatch(/repeats/);
-  });
-
-  it("asks once more for a note that failed, and gives up on one that fails again", async () => {
-    const people = [{ id: "a", card: jordan as never, kind: "alum" as const, why: "x" }, { id: "b", card: riley as never, kind: "team_engineer" as const, why: "y" }];
-    const prompts: string[] = [];
-    const replies = [
-      { drafts: [{ id: "a", ...good }, { id: "b", connect: "Hi Riley, I worked at Initech.", message: "Hi.", inmail: { subject: "Hi", body: "Hi" } }] },
-      { drafts: [{ id: "b", connect: "Hi Riley, I worked at Initech again.", message: "Hi.", inmail: null }] },
-    ];
-    const out = await writeNotes(profile, entry(), people, true, async (prompt) => (prompts.push(prompt), JSON.stringify(replies.shift())));
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]).toContain("rewrite_these_fixing");
-    expect(out[0]?.drafts?.connect).toBe(good.connect);
-    expect(out[1]?.drafts).toBeNull();
-    expect(out[1]?.note).toMatch(/Initech/);
   });
 });
 
@@ -213,11 +169,7 @@ describe("the run", () => {
     const kind = /recruit/i.test(h) ? "campus_recruiter" : /manager/i.test(h) ? "team_manager" : /ceo|founder/i.test(h) ? "team_manager" : /engineer/i.test(h) ? "team_engineer" : "same_company";
     return { kind: { type: "choice", choice: kind, confidence: 0.9, probabilities: {} }, seniority: { type: "choice", choice: /ceo|founder/i.test(h) ? "executive" : "mid", confidence: 0.9, probabilities: {} } } as never;
   } };
-  const write = async (prompt: string) => {
-    const people = (JSON.parse(prompt) as { people: { id: string; name: string }[] }).people;
-    return JSON.stringify({ drafts: people.map((p) => ({ id: p.id, connect: `Hi ${p.name.split(" ")[0]}, I just applied for the Software Engineer Intern role at Acme Robotics.`, message: "Thanks for connecting. I built Example App on my own.", inmail: null })) });
-  };
-  const deps = (file: string, b: { browse: Browse }, sleeps: number[] = []) => ({ browse: b.browse, jev, write, sleep: async (ms: number) => void sleeps.push(ms), now: () => NOW, random: () => 0.5, file, cacheFile: `${file}.kinds.json` });
+  const deps = (file: string, b: { browse: Browse }, sleeps: number[] = []) => ({ browse: b.browse, jev, sleep: async (ms: number) => void sleeps.push(ms), now: () => NOW, random: () => 0.5, file, cacheFile: `${file}.kinds.json` });
 
   it("does nothing until the person has read the risk note", async () => {
     const file = tmp();
@@ -248,7 +200,8 @@ describe("the run", () => {
     expect(kept.length).toBeLessThanOrEqual(OUTREACH.perCompany);
     expect(kept.map((p) => p.name)).not.toContain("Sam Quinn");
     expect(f.people.find((p) => p.executive)?.name).toBe("Morgan Ash");
-    expect(kept.every((p) => p.drafts && p.status === "found")).toBe(true);
+    expect(kept.every((p) => p.status === "found")).toBe(true);
+    expect(kept.length).toBeGreaterThan(OUTREACH.maxRecruiters);
     expect(f.jobs.job1?.found).toBe(kept.length);
     // A second run finds the company in the record and nobody new.
     const again = browser([]);
@@ -322,12 +275,43 @@ describe("choosing jobs and the person's own marks", () => {
   it("records a note as sent, and says when one follow-up is due", () => {
     const file = tmp();
     mutateOutreach((f) => {
-      f.people.push({ id: "abc123def456", profileUrl: "https://www.linkedin.com/in/example-a/", name: "Avery Stone", headline: "Recruiter", location: "", summary: "", mutualLine: "", company: "Acme Robotics", kind: "recruiter", degree: 3, warm: { sharedSchool: false, mutuals: 0 }, executive: false, why: "a recruiter there", jobId: "job1", drafts: null, draftNote: null, status: "found", foundAt: NOW.toISOString(), sentAt: null, updatedAt: NOW.toISOString() });
+      f.people.push({ id: "abc123def456", profileUrl: "https://www.linkedin.com/in/example-a/", name: "Avery Stone", headline: "Recruiter", location: "", mutualLine: "", company: "Acme Robotics", role: "Software Engineer Intern", kind: "recruiter", degree: 3, warm: { sharedSchool: false, mutuals: 0 }, executive: false, why: "a recruiter there", jobId: "job1", status: "found", foundAt: NOW.toISOString(), sentAt: null, updatedAt: NOW.toISOString() });
     }, file);
     expect(() => markPerson("zzz", "sent", NOW, file)).toThrow(/no person/);
     const p = markPerson("abc1", "sent", NOW, file);
     expect(p.sentAt).toBe(NOW.toISOString());
     expect(followUpsDue(loadOutreach(file), 7, new Date(NOW.getTime() + 8 * 86_400_000))).toHaveLength(1);
     expect(followUpsDue(loadOutreach(file), 7, NOW)).toHaveLength(0);
+  });
+});
+
+describe("the sheet and older records", () => {
+  it("writes one row per person under the sheet's columns, executives after the rest of their job", () => {
+    const f = loadOutreach(tmp());
+    const base = { profileUrl: "https://www.linkedin.com/in/example-a/", headline: "Engineer", location: "Seattle, Washington", mutualLine: "Casey Morgan, Drew Hale & 1 other mutual connections", company: "Acme Robotics", role: "Software Engineer Intern", kind: "team_engineer" as const, degree: 2 as const, warm: { sharedSchool: true, mutuals: 3 }, why: "an engineer in the area of the role", jobId: "job1", status: "found" as const, foundAt: NOW.toISOString(), sentAt: null, updatedAt: NOW.toISOString() };
+    f.people.push({ ...base, id: "exec", name: "Morgan Ash", executive: true }, { ...base, id: "eng", name: "Jordan Lee", executive: false });
+    const rows = peopleRows(f);
+    expect(rows[0]).toEqual([...PEOPLE_COLUMNS]);
+    expect(rows.slice(1).map((r) => r[2])).toEqual(["Jordan Lee", "Morgan Ash"]);
+    expect(rows[1]).toEqual(["Acme Robotics", "Software Engineer Intern", "Jordan Lee", "Engineer", "an engineer in the area of the role", "yes", "Casey Morgan, Drew Hale & 1 other mutual connections", "2nd", "Seattle, Washington", "found", "", "https://www.linkedin.com/in/example-a/", "2026-11-26", "job1", "eng"]);
+    expect(rows[2]?.[4]).toMatch(/^executive: /);
+  });
+
+  it("writes the sheet with every change to the record, and only for the person's own record", () => {
+    const file = tmp();
+    const sheet = file.replace(/\.json$/, ".csv");
+    mutateOutreach((f) => void (f.riskAcknowledgedAt = NOW.toISOString()), file, sheet);
+    expect(readFileSync(sheet, "utf8").split("\r\n")[0]).toBe(PEOPLE_COLUMNS.join(","));
+  });
+
+  it("reads a record from before: an alum is an engineer, and the old drafts are let go", () => {
+    const file = tmp();
+    mutateOutreach(() => {}, file);
+    const raw = JSON.parse(readFileSync(file, "utf8"));
+    raw.people = [{ id: "a1", profileUrl: "https://www.linkedin.com/in/example-a/", name: "Jordan Lee", headline: "Engineer", company: "Acme Robotics", kind: "alum", degree: 3, warm: { sharedSchool: true, mutuals: 0 }, why: "an alum of your school who works there", jobId: "job1", drafts: { connect: "Hi", message: "Hi", inmail: null }, draftNote: null, status: "found", foundAt: NOW.toISOString(), updatedAt: NOW.toISOString() }];
+    writeFileSync(file, JSON.stringify(raw));
+    const p = loadOutreach(file).people[0];
+    expect(p?.kind).toBe("team_engineer");
+    expect(p && "drafts" in p).toBe(false);
   });
 });

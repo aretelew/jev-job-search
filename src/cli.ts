@@ -697,7 +697,7 @@ program
 
 program
   .command("outreach <action> [args...]")
-  .description(`Find people on LinkedIn to write to about a job you applied to, and draft the notes. You send them. ${OUTREACH_ACTIONS}`)
+  .description(`Make a list of people on LinkedIn to reach out to about a job you applied to: engineers, managers and a recruiter or two. You reach out yourself. ${OUTREACH_ACTIONS}`)
   .option("--accept-risk", "with signin: you read the risk note and want outreach")
   .option("--again", "with find: look at a job again even if outreach already did")
   .option("--job <id>", "with list: only this job")

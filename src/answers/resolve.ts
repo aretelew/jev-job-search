@@ -130,7 +130,7 @@ export async function logNotes(profile: Profile, entries: QueueEntry[]): Promise
   return out;
 }
 
-export type WriterCall = { at: string; purpose: "resolve" | "log" | "tailor" | "outreach"; jobId: string; model: string; inputTokens: number; cacheWriteTokens: number; cacheReadTokens: number; outputTokens: number; costUsd: number; ms: number };
+export type WriterCall = { at: string; purpose: "resolve" | "log" | "tailor"; jobId: string; model: string; inputTokens: number; cacheWriteTokens: number; cacheReadTokens: number; outputTokens: number; costUsd: number; ms: number };
 
 /** What the writer has used in this process. costUsd is what the calls would cost at API prices; on a subscription they draw on the plan instead. */
 export const writerUsage = { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };

@@ -144,13 +144,6 @@ function claimChecker(profile: Profile, other: string) {
   return { check, checkSkill, note: (claim: string) => void bad.add(claim), claims: () => [...bad] };
 }
 
-/** The claims a line of free text makes that neither the profile nor `other` holds. */
-export function claimsIn(text: string, profile: Profile, other: string): string[] {
-  const c = claimChecker(profile, other);
-  c.check(text, true);
-  return c.claims();
-}
-
 /** The claims a draft makes that the profile does not hold: numbers, and capitalized names of tools, places and companies. */
 export function unsupportedClaims(t: Tailored, profile: Profile, posting: string): string[] {
   const { check, checkSkill, note, claims } = claimChecker(profile, posting);

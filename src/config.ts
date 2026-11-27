@@ -75,10 +75,12 @@ export const PATHS = {
   /** The person's own files, at the top of the project: the resume to send, a transcript, and the tailored pairs under tailored/. */
   documentsDir: path.join(ROOT, "documents"),
   browserScripts: path.join(ROOT, "src", "forms"),
-  /** People found on LinkedIn to write to about a job, the drafts, and what the person did with them. Personal data of others: git-ignored. */
+  /** People found on LinkedIn to reach out to about a job, and what the person did. Personal data of others: git-ignored. */
   outreach: path.join(ROOT, "data", "outreach.json"),
   /** JEV's answers about who a person found on LinkedIn is, kept so an unchanged card is not asked about again. */
   outreachKinds: path.join(ROOT, "data", "cache", "outreach-kinds.json"),
+  /** The same people as a sheet to open, written after every change to the record. Git-ignored with the rest of applications/. */
+  people: path.join(ROOT, "applications", "people.csv"),
 } as const;
 
 /** Loads KEY=value lines from .env into process.env without overriding existing values. */
@@ -709,7 +711,7 @@ export const RUN = {
 } as const;
 
 /**
- * Outreach (`src/outreach/`): finding people on LinkedIn to write to about a job. The tool reads
+ * Outreach (`src/outreach/`): finding people on LinkedIn to reach out to about a job. The tool reads
  * search pages in its own Chrome, where the person signed in, and never clicks or sends anything
  * there. These limits are the tool's own, not LinkedIn's: few pages, a person's pace, and a full
  * stop at the first sign LinkedIn objects. Premium does not change how automation is detected.
@@ -720,10 +722,11 @@ export const OUTREACH = {
   jobsPerRun: 5,
   appliedWithinDays: 7,
   /**
-   * Search pages per job: early-career recruiters (LinkedIn's own OR and quotes, so one page covers the
-   * ways employers name it), any recruiter, engineers, the candidate's school, and current interns.
+   * Search pages per job, mostly engineers: software engineers, engineering managers, people from the
+   * candidate's school, current interns, and one page of recruiters (LinkedIn's own OR, so one page
+   * covers the ways employers name them).
    */
-  searches: ['"university recruiting" OR "campus recruiting" OR "early career" OR "university recruiter" OR "emerging talent"', "recruiter", "software engineer", "{school}", "intern"],
+  searches: ["software engineer", "engineering manager", "{school}", "intern", 'recruiter OR recruiting OR "early career" OR "university recruiting" OR talent'],
   /** Pages the tool loads on LinkedIn in one local day, counting company lookups. Raise it slowly, only after clean runs. */
   pagesPerDay: 30,
   /** The pause before each page, picked at random in this range, so the pace is a person's and not a burst. */
@@ -735,34 +738,25 @@ export const OUTREACH = {
   /** How often `outreach signin` looks at the tab's address while the person signs in, and for how long. */
   signInPollMs: 2_000,
   signInWaitMs: 5 * 60_000,
-  /** People kept per job, and at most per employer over all time, so no team gets a pile of notes from one candidate. */
-  perJob: 4,
-  perCompany: 3,
-  /** LinkedIn's limit on a connection note. Check it on the live page if LinkedIn changes it. */
-  noteChars: 300,
-  /** The longest message after a connection is accepted, and the longest InMail. */
-  messageChars: 900,
+  /** People kept per job, and at most per employer over all time, so no one team gets a pile of messages from one candidate. */
+  perJob: 8,
+  perCompany: 10,
+  /** Of the people kept for a job, at most this many recruiters: the rest are the engineers and managers. */
+  maxRecruiters: 2,
+  recruiterKinds: ["campus_recruiter", "recruiter"] as readonly string[],
   /** JEV's answer about a person counts at or above this confidence. Under it the person is not suggested. */
   jevConfidence: 0.6,
-  /**
-   * The best of these kinds is kept first whenever one was found, before the rest are ranked: whoever
-   * recruits is the person who moves an application, and at a small company that is a recruiter
-   * who does not say they recruit students.
-   */
-  firstOf: ["campus_recruiter", "recruiter"] as readonly string[],
   /** How much the kind of person counts when ranking. A kind with no weight is never suggested. */
-  weights: { campus_recruiter: 10, team_manager: 8, alum: 7, team_engineer: 6, recruiter: 5, intern_peer: 4 } as Record<string, number>,
-  /** A shared school counts about as much as one step up the list above, a mutual connection a little less, a second-degree link a little. */
+  weights: { team_manager: 8, campus_recruiter: 8, team_engineer: 7, recruiter: 5, intern_peer: 4 } as Record<string, number>,
+  /** A shared school is a bonus, about one step up the list above; a mutual connection a little less, a second-degree link a little. */
   sharedSchool: 2,
   mutual: 1.5,
   secondDegree: 1,
-  /** When a note goes unanswered for this long, one follow-up is suggested, and only one. */
+  /** When a message the person sent goes unanswered for this long, one follow-up is suggested, and only one. */
   followUpDays: 7,
   /** Words on a page that mean LinkedIn wants the run to stop: a security check, or a limit reached. */
   checkWords: /security check|verify (?:that )?you(?:'|’)re (?:a )?human|unusual activity|let(?:'|’)s do a quick|captcha/i,
   limitWords: /reached the (?:monthly |weekly )?(?:commercial use )?limit|commercial use limit|too many (?:searches|requests)|you(?:'|’)ve reached/i,
-  /** Subjects a note never raises: they are for the application form, answered from the profile, and only when it asks. */
-  offLimits: /\bgpa\b|\bcitizen|work authori[sz]|\bvisa\b|sponsorship/i,
   /** Paths on LinkedIn that are a sign-in or a check, not a page of results. */
   stopPaths: /^\/(?:login|uas\/login|checkpoint|authwall|signup)/,
 } as const;
