@@ -1,7 +1,9 @@
 /**
- * Where each list-site short link leads, as far as it is known. A short link and the posting it
- * leads to are one job, so the posting key reads this: a job applied to under its short link and
- * found again at its real address keeps one identity, and is never sent twice.
+ * Where each list-site short link leads, as far as it is known. A link to a careers site that only
+ * shows a posting from another board (DISCOVER.eightfoldHosts) counts as a short link to that posting.
+ * A short link and the posting it leads to are one job, so the posting key reads this: a job applied
+ * to under its short link and found again at its real address keeps one identity, and is never
+ * sent twice.
  *
  * This module only holds what was learned. Learning it, over the network, is src/sources/shortLinks.ts.
  */
@@ -17,15 +19,20 @@ export function useShortLinkStore(s: Store | null): void {
   store = s;
 }
 
-export function isShortLink(url: string): boolean {
+function onHosts(url: string, hosts: readonly string[]): boolean {
   let host = "";
   try {
     host = new URL(url).hostname.toLowerCase();
   } catch {
     return false;
   }
-  return DISCOVER.shortLinkHosts.some((h) => host === h || host.endsWith(`.${h}`));
+  return hosts.some((h) => host === h || host.endsWith(`.${h}`));
 }
+
+/** A posting link on an Eightfold careers site, which shows a posting from another board. */
+export const isEightfoldLink = (url: string): boolean => onHosts(url, DISCOVER.eightfoldHosts);
+
+export const isShortLink = (url: string): boolean => onHosts(url, DISCOVER.shortLinkHosts) || isEightfoldLink(url);
 
 /** Where a short link leads, when that was learned. Undefined for any other link. */
 export const knownTarget = (url: string): string | undefined => (isShortLink(url) ? targets().get(url) : undefined);

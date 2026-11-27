@@ -184,6 +184,11 @@ export const DISCOVER = {
    * job board is known.
    */
   shortLinkHosts: ["go.vansh.nyc"],
+  /**
+   * Eightfold careers sites, which show a posting from the employer's real board and take no application.
+   * A link to one is resolved like a short link, to the posting it shows, so it is one job with that posting.
+   */
+  eightfoldHosts: ["jobs.nvidia.com"],
   /** The pause between two lookups on one shortener. A first search resolves every link once; later ones only new links. */
   shortLinkGapMs: 200,
   /** The most redirects followed for one link, so a shortener that points at another still resolves. */

@@ -7,6 +7,7 @@ import { canonicalUrl, dedupe, jobId, postingKey, type Job } from "../src/jobs/n
 import { entryFor, foldSameJob, loadQueue, type QueueEntry } from "../src/jobs/queue.js";
 import { isShortLink, useShortLinkStore } from "../src/jobs/shortLinkStore.js";
 import { compactRows, emptyRow } from "../src/log/csv.js";
+import { eightfoldApplyUrl } from "../src/sources/ats/eightfold.js";
 import { resolveShortLink, resolveShortLinks } from "../src/sources/shortLinks.js";
 
 // Made-up paths on the shortener the config names; nothing here reaches the network.
@@ -117,5 +118,29 @@ describe("a job applied to under its short link", () => {
     const rows = compactRows([{ ...emptyRow(), "Job Link": `${SHORT}/1DJ?s=y`, "App. Status": "Applied" }, { ...emptyRow(), "Job Link": target, "App. Status": "Queued" }]);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.["App. Status"]).toBe("Applied");
+  });
+});
+
+describe("a posting shown on an Eightfold careers site", () => {
+  // Made-up postings on the careers host the config names; nothing here reaches the network.
+  const CAREERS = "https://jobs.nvidia.com/careers/job/100000000001";
+  const WORKDAY = "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Software-Intern_JR1000001";
+
+  it("reads where the posting applies from the site's own endpoint", async () => {
+    const asked: string[] = [];
+    const get = async (url: string) => (asked.push(url), { id: 100000000001, apply_redirect_url: WORKDAY });
+    expect(await eightfoldApplyUrl(CAREERS, get)).toBe(WORKDAY);
+    expect(asked).toEqual(["https://jobs.nvidia.com/api/apply/v2/jobs/100000000001?domain=nvidia.com"]);
+    expect(await eightfoldApplyUrl(CAREERS, async () => ({ id: 1 }))).toBeNull();
+    expect(await eightfoldApplyUrl("https://jobs.nvidia.com/careers?query=intern", get)).toBeNull();
+  });
+
+  it("is one job with the posting on the board it applies through", async () => {
+    expect(isShortLink(CAREERS)).toBe(true);
+    const direct = job(WORKDAY, { source: "workday:nvidia", ats: "workday" });
+    const { jobs } = await resolveShortLinks([job(CAREERS), direct], async () => WORKDAY);
+    expect(jobs[0]?.ats).toBe("workday");
+    expect(dedupe(jobs)).toHaveLength(1);
+    expect(postingKey(CAREERS)).toBe(postingKey(WORKDAY));
   });
 });
