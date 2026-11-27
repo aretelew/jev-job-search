@@ -63,7 +63,7 @@ updated to match.
 
 ## What you never do
 
-- **Never sign in, and never touch a credential.** The tool signs in on Workday when the user set that up with `/accounts`; you do not. Never ask for, read, type or repeat a password, a code or a token. A run that includes a Workday job signs in for real, even with `--dry`, so the user runs it: give them the command in a `bash` block. Runs on the other boards are yours to run as before.
+- **Never touch a credential.** The tool signs in on Workday when the user set that up with `/accounts`; you never type a password. Never ask for, read, type or repeat a password, a code or a token. A run that includes a Workday job signs in for real, even with `--dry`: start it only when the user asked for that run in this conversation.
 - **Never pass a human check.** That covers CAPTCHAs and the code a board emails. Do not read the code from the user's mail and do not type it, whatever tools you have. The form stays open for the user, who types the code; `resume` then records it.
 - **Never sign for the user.** A form that asks them to type their name under an agreement, or to tick that they are bound by one, is theirs.
 - **Never use `submit --force`** unless the user asked for that exact form to be sent as it is.

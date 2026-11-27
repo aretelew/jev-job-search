@@ -25,8 +25,8 @@ is off until the user turns it on.
 | `/daily stop` | `npx jev daily --stop`. The run that is working finishes the application it is on and opens no other. Say that this does not remove the schedule; `/daily pause` does. |
 
 If `npx jev accounts` shows Workday is allowed, a daily run signs in at
-employers. Then you do not start `dry` or `run` yourself: show the command
-in a `bash` block, which has a Run button, and let them click it.
+employers, and a rehearsal does too. Say so when you start one; the rule
+above still holds: `run` only after they typed `/daily run`.
 
 ## Setup: the standing policy
 

@@ -39,11 +39,11 @@ If something is set up, say what, what waits for them, and the next step.
 
 | They type | You do |
 |---|---|
-| `/accounts signin <employer>` | Show `npx jev accounts signin <employer>` in a `bash` block. It opens the employer's page in the tool's Chrome window; they sign in there themselves. Tell them to click Run and then look at that window. |
+| `/accounts signin <employer>` | Run `npx jev accounts signin <employer>` in the background. It opens the employer's page in the tool's Chrome window; they sign in there themselves. Tell them to look at that window. |
 | `/accounts password <employer>` | Run `npx jev accounts password <employer>`. A window opens on their Mac; they type that employer's password there, twice. You never see it. With no employer it stores the one password they use on accounts they already had. |
 | `/accounts browser <employer>` | Only when they say they saved that employer's password in the tool's Chrome and want the tool to use it. Run `npx jev accounts browser <employer>`. The tool then presses Sign In once that browser has filled the page in; it types nothing and never reads the password. `--off` takes it back. |
 | `/accounts add workday` | The questions below. Run it with `--preview` first and read what it allows back to them. Save only after a yes, with exactly the flags they agreed to. |
-| `/accounts setup <employer>` | Show `npx jev accounts setup <employer>` in a `bash` block. It signs in, or makes the account. They click Run. |
+| `/accounts setup <employer>` | Run `npx jev accounts setup <employer>` in the background. It signs in, or makes the account. Tell them to watch the tool's Chrome window, and read the result back. |
 | `/accounts clear` | `npx jev accounts clear`, after they fixed what paused an account. |
 | `/accounts off` / `/accounts on` | `npx jev accounts off` / `on`. Say that everything set up is kept. |
 | `/accounts forget <employer or all>` | Run it without `--yes` first and read back what it removes. After a yes, run it with `--yes`. Say that the account at the employer still exists. |
@@ -71,12 +71,12 @@ their Keychain. `--max-new 3` is the default.
 - **Never ask for, read, type or repeat a password, a code or a token**,
   in chat, in a file or in a command. Never read the Keychain, `.env` or
   the tool's Chrome profile.
-- **Never start anything that signs in or signs up at an employer.** That
-  is `accounts signin`, `accounts setup`, `apply` on a Workday job in a
-  real run, `daily` and `resume --submit` when Workday is set up. Show the
-  command in a `bash` block; the app puts a Run button on it. A rehearsal
-  (`--dry`) of a Workday job signs in to an account they have and makes
-  nothing; treat it the same way.
+- **Start a run that signs in or signs up at an employer only when the
+  user asked for it in this conversation.** That is `accounts signin`,
+  `accounts setup`, and `apply` or `resume --submit` on a Workday job,
+  including a rehearsal (`--dry`), which signs in to an account they have.
+  The tool types the password from the secret store; you never see it.
+  `daily` keeps its own rule: only after `/daily run` or `/daily schedule`.
 - **Never pass a human check**: a CAPTCHA, a phone code, a passkey, or the
   code a board emails because it suspects a robot.
 - **Never allow more than they said.** No flag they did not agree to, and

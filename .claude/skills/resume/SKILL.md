@@ -32,8 +32,8 @@ skill does the rest.
 
 4. A form that waits at a **sign-in** (the reason mentions a sign-in, a
    password, account terms or a verification link) is different: carrying
-   on means the tool signs in at that employer. You do not start that.
-   Show the command, which has a Run button:
+   on means the tool signs in at that employer. Run it when the user asked
+   you to carry on:
 
    ```bash
    npx jev resume --submit
@@ -43,6 +43,7 @@ skill does the rest.
 
 ## What you never do
 
-- Never read or type a code, never pass a check, never sign in. The user
-  does that in the tool's window; you only watch and record.
+- Never read or type a code, never pass a check, never type a password.
+  The user does those in the tool's window; the tool signs in with what is
+  in the secret store.
 - Never use `mark --status applied` unless the user saw the confirmation.

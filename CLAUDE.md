@@ -64,10 +64,12 @@ doctor` says what is in place and what to do next.
 - **You never touch a credential.** When you work in this repo you never
   ask for, read, type or repeat a password, a code or a token, and never
   read the Keychain or any other secret store. The password is typed by the
-  person into a window of their own computer (`src/accounts/ask.ts`). You never start a run that signs
-  in or signs up at an employer, which includes `apply` on a Workday job
-  with or without `--dry`: show the command in a `bash` block and let the
-  person click Run. You build and test against the scripted pages
+  person into a window of their own computer (`src/accounts/ask.ts`). You
+  may start a run that signs in or signs up at an employer (`accounts
+  setup`, `accounts signin`, `apply` or `resume --submit` on a Workday job,
+  with or without `--dry`) when the person asked for that run in the
+  conversation. The tool takes the password from the secret store and types
+  it; you never see it. You build and test against the scripted pages
   in `tests/helpers/` with made-up credentials.
 - **Secrets live in the system's secret store and travel as `Secret`.**
   Passwords and the Gmail tokens are in the macOS Keychain, the Linux
