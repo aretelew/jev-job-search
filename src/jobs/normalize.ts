@@ -72,11 +72,13 @@ export function postingKey(raw: string): string {
 /**
  * A Workday posting by its employer and requisition, as in "asml:J-00357859". The lists link one
  * posting under several site names ("ASMLEXT1" and "asmlext1", "Cisco_Careers" and "en-US"), and
- * none of them changes which posting it is.
+ * none of them changes which posting it is. A requisition posted on two of the employer's sites
+ * gets a number on each ("R26-5303-1", "R26-5303-2"); Workday takes one application for the
+ * requisition, so the number is dropped.
  */
 function workdayRequisition(url: string): string | null {
   const tenant = workday.tenantOf(url)?.tenant;
-  const requisition = /\/job\/(?:[^/]+\/)?[^/]*_([A-Za-z0-9-]+)(?:\/|$)/.exec(new URL(url).pathname)?.[1];
+  const requisition = /\/job\/(?:[^/]+\/)?[^/]*_([A-Za-z0-9-]+?)(?:-\d{1,2})?(?:\/|$)/.exec(new URL(url).pathname)?.[1];
   return tenant && requisition ? `${tenant}:${requisition.toUpperCase()}` : null;
 }
 

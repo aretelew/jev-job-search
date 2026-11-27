@@ -12,14 +12,16 @@ describe("postingKey", () => {
     expect(jobId("https://stripe.com/jobs/search?gh_jid=8157838")).toBe(jobId("https://job-boards.greenhouse.io/stripe/jobs/8157838"));
   });
 
-  it("gives a Workday posting one id under every site name, and keeps different requisitions apart", () => {
+  it("gives a Workday requisition one id under every site name and posting number, and keeps different requisitions apart", () => {
     const one = "workday:acme:J-00357859";
     expect(postingKey("https://acme.wd3.myworkdayjobs.com/ACMEEXT1/job/San-Diego-CA-USA/Internship---Software-Engineer_J-00357859")).toBe(one);
     expect(postingKey("https://acme.wd3.myworkdayjobs.com/acmeext1/job/San-Diego-CA-USA/Software-Engineer-Intern_J-00357859")).toBe(one);
     expect(postingKey("https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/Internship_J-00357859/apply/applyManually")).toBe(one);
     expect(postingKey("https://wd3.myworkdaysite.com/recruiting/acme/External/job/San-Diego/Intern_j-00357859")).toBe(one);
     expect(postingKey("https://acme.wd3.myworkdayjobs.com/ACMEEXT1/job/San-Diego/Intern_J-00357860")).not.toBe(one);
-    expect(postingKey("https://acme.wd3.myworkdayjobs.com/ACMEEXT1/job/San-Diego/Intern_R123-1")).not.toBe(postingKey("https://acme.wd3.myworkdayjobs.com/ACMEEXT1/job/San-Diego/Intern_R123"));
+    expect(postingKey("https://acme.wd1.myworkdayjobs.com/Early-Careers/job/Milwaukee/Intern--Software-Engineer_R26-5303-1")).toBe("workday:acme:R26-5303");
+    expect(postingKey("https://acme.wd1.myworkdayjobs.com/External_Acme/job/Milwaukee/Intern--Software-Engineer_R26-5303-2/apply")).toBe("workday:acme:R26-5303");
+    expect(postingKey("https://acme.wd1.myworkdayjobs.com/External_Acme/job/Milwaukee/Intern_R26-5304-1")).not.toBe("workday:acme:R26-5303");
     expect(postingKey("https://other.wd3.myworkdayjobs.com/ACMEEXT1/job/San-Diego/Intern_J-00357859")).not.toBe(one);
   });
 
