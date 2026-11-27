@@ -12,7 +12,7 @@ import { learn, signInHosts } from "../knowledge/sites.js";
 import { hostIs } from "./normalize.js";
 
 /** One company's settings on a shared board say nothing about the other companies there. */
-const SHARED_BOARDS = ["greenhouse.io", "lever.co", "ashbyhq.com", "rippling.com", "bamboohr.com", "smartrecruiters.com", "jobvite.com", "workable.com"];
+const SHARED_BOARDS = ["greenhouse.io", "lever.co", "ashbyhq.com", "jobs.gem.com", "rippling.com", "bamboohr.com", "smartrecruiters.com", "jobvite.com", "workable.com"];
 
 const hostOf = (url: string): string => {
   try {

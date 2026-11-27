@@ -6,6 +6,7 @@
  */
 import { JEV } from "../config.js";
 import { fetchAshbyJob, ashbyJobId, ashbySlug } from "../sources/ats/ashby.js";
+import { fetchGemJob, gemJobId, gemSlug } from "../sources/ats/gem.js";
 import { fetchGreenhouseJob, greenhouseJobId, greenhouseSlug } from "../sources/ats/greenhouse.js";
 import { fetchLeverJob, leverJobId, leverSlug } from "../sources/ats/lever.js";
 import { fetchWorkdayJob } from "../sources/ats/workday.js";
@@ -39,6 +40,13 @@ export async function describe(job: Job): Promise<Job> {
       const id = ashbyJobId(job.url);
       if (slug && id) {
         text = await fetchAshbyJob(slug, id, job.company);
+        source = "api";
+      }
+    } else if (job.ats === "gem") {
+      const slug = gemSlug(job.url);
+      const id = gemJobId(job.url);
+      if (slug && id) {
+        text = await fetchGemJob(slug, id);
         source = "api";
       }
     }

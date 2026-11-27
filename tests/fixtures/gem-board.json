@@ -1,0 +1,193 @@
+[
+ {
+  "absolute_url": "https://jobs.gem.com/nominal/am9icG9zdDqriogNmq5bb41RdlSlBulk",
+  "content": "<div><strong style=\"font-size: 18px;\">About Nominal</strong></div><div><br></div><div>Engineers today are building some of the most ambitious machines humanity has ever seen. They should have AI that’",
+  "content_plain": "About Nominal\nEngineers today are building some of the most ambitious machines humanity has ever seen. They should have AI that’s purpose-built for them.\nNominal is building the Hardware Intelligence Platform that gives engineers increased visibility into complex physical systems, helps them make better decisions, and ultimately gets their products into the real world faster. It brings together th",
+  "created_at": "2026-09-10T16:34:35.334Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "ZGVwdDppUJouEqsaEVIeUY2GoTRR",
+    "name": "Software Engineering",
+    "parent_id": "d376d1c2b660e3b7f2e6d5d0d9da0e5d"
+   }
+  ],
+  "employment_type": "intern",
+  "first_published_at": "2026-09-10T16:49:09.881Z",
+  "id": "am9icG9zdDqriogNmq5bb41RdlSlBulk",
+  "internal_job_id": "am9iOmkIT-x6IVkvJcSGO1IkDic",
+  "location": {
+   "name": "New York, United States"
+  },
+  "location_type": "in_office",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "fefa0a20ec8703b4288a34cb4b7a68ce",
+    "location": {
+     "name": "New York, United States"
+    },
+    "name": "New York, NY",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "856018ff4bab461d3d10a88b4d10be02",
+    "location": {
+     "name": "Los Angeles, United States"
+    },
+    "name": "Los Angeles, CA",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "88616e305d8d08ccdc948214dd025b16",
+    "location": {
+     "name": "Austin, United States"
+    },
+    "name": "Austin, TX",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "R127",
+  "title": "Software Engineer - Internship (Summer 2027) ",
+  "updated_at": "2026-11-23T00:41:02.118Z"
+ },
+ {
+  "absolute_url": "https://jobs.gem.com/nominal/0a938c16-c497-4104-8196-137c38306d81",
+  "content": "<h3><strong style=\"font-size: 18px;\">About Nominal</strong></h3><div><br></div><div>Engineers today are building some of the most ambitious machines humanity has ever seen. They should have AI that’s ",
+  "content_plain": "About Nominal\nEngineers today are building some of the most ambitious machines humanity has ever seen. They should have AI that’s purpose-built for them.\nNominal is building the Hardware Intelligence Platform that gives engineers increased visibility into complex physical systems, helps them make better decisions, and ultimately gets their products into the real world faster. It brings together th",
+  "created_at": "2024-10-29T21:42:06.000Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "ZGVwdDppUJouEqsaEVIeUY2GoTRR",
+    "name": "Software Engineering",
+    "parent_id": "d376d1c2b660e3b7f2e6d5d0d9da0e5d"
+   }
+  ],
+  "employment_type": "full_time",
+  "first_published_at": "2024-10-29T21:42:06.000Z",
+  "id": "0a938c16-c497-4104-8196-137c38306d81",
+  "internal_job_id": "0a938c16-c497-4104-8196-137c38306d81",
+  "location": {
+   "name": "Los Angeles, United States"
+  },
+  "location_type": "in_office",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "856018ff4bab461d3d10a88b4d10be02",
+    "location": {
+     "name": "Los Angeles, United States"
+    },
+    "name": "Los Angeles, CA",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "88616e305d8d08ccdc948214dd025b16",
+    "location": {
+     "name": "Austin, United States"
+    },
+    "name": "Austin, TX",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "fefa0a20ec8703b4288a34cb4b7a68ce",
+    "location": {
+     "name": "New York, United States"
+    },
+    "name": "New York, NY",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "bG9jOtCgxYClP0PVmAebKp85jzY",
+    "location": {
+     "name": "Seattle, United States"
+    },
+    "name": "Seattle, WA",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "bG9jOqh8PbgToOXeEg198BFqA0A",
+    "location": {
+     "name": "Montréal, Canada"
+    },
+    "name": "Montréal",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "R71",
+  "title": "Software Engineer - Backend",
+  "updated_at": "2026-11-09T03:32:28.263Z"
+ },
+ {
+  "absolute_url": "https://jobs.gem.com/nominal/am9icG9zdDq1JPt4gojJg-2VrQLT89PU",
+  "content": "<div><strong style=\"font-size: 18px;\">About Nominal</strong></div><div><br></div><div>Engineers today are building some of the most ambitious machines humanity has ever seen. They should have AI that’",
+  "content_plain": "About Nominal\nEngineers today are building some of the most ambitious machines humanity has ever seen. They should have AI that’s purpose-built for them.\nNominal is building the Hardware Intelligence Platform that gives engineers increased visibility into complex physical systems, helps them make better decisions, and ultimately gets their products into the real world faster. It brings together th",
+  "created_at": "2026-09-20T03:26:15.577Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "ZGVwdDppUJouEqsaEVIeUY2GoTRR",
+    "name": "Software Engineering",
+    "parent_id": "d376d1c2b660e3b7f2e6d5d0d9da0e5d"
+   }
+  ],
+  "employment_type": "intern",
+  "first_published_at": "2026-09-20T03:32:23.954Z",
+  "id": "am9icG9zdDq1JPt4gojJg-2VrQLT89PU",
+  "internal_job_id": "am9iOolaULlGOpJedes9yW72WMI",
+  "location": {
+   "name": "New York, United States"
+  },
+  "location_type": "in_office",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "fefa0a20ec8703b4288a34cb4b7a68ce",
+    "location": {
+     "name": "New York, United States"
+    },
+    "name": "New York, NY",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "856018ff4bab461d3d10a88b4d10be02",
+    "location": {
+     "name": "Los Angeles, United States"
+    },
+    "name": "Los Angeles, CA",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "R133",
+  "title": "Mission Dev Engineer - Internship (Summer 2027)",
+  "updated_at": "2026-11-23T00:41:55.834Z"
+ }
+]

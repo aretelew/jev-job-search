@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { knownTarget } from "./shortLinkStore.js";
 
 export type Ats =
-  | "greenhouse" | "lever" | "ashby" | "workday" | "icims" | "smartrecruiters" | "jobvite"
+  | "greenhouse" | "lever" | "ashby" | "gem" | "workday" | "icims" | "smartrecruiters" | "jobvite"
   | "rippling" | "bamboohr" | "taleo" | "oracle" | "successfactors" | "linkedin" | "amazon" | "other";
 
 export type Sponsorship = "offers" | "none" | "citizenship" | "unknown";
@@ -114,6 +114,7 @@ export function atsFromUrl(url: string): Ats {
   if (on("greenhouse.io") || /[?&]gh_jid=/.test(u)) return "greenhouse";
   if (on("lever.co")) return "lever";
   if (on("ashbyhq.com")) return "ashby";
+  if (on("jobs.gem.com")) return "gem";
   if (on("myworkdayjobs.com", "workday.com") || /(^|\.)wd\d+\./.test(h)) return "workday";
   if (on("icims.com") || /[?&]icims=1\b/.test(u)) return "icims";
   if (on("smartrecruiters.com")) return "smartrecruiters";

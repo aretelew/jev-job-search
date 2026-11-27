@@ -27,7 +27,7 @@ new.
 ## Descriptions
 
 The rating needs the posting text. `src/jobs/describe.ts` gets it from the
-ATS API when the URL is Greenhouse, Lever or Ashby (clean text, cached six
+ATS API when the URL is Greenhouse, Lever, Ashby or Gem (clean text, cached six
 hours) and otherwise fetches the page and strips it to text. Pages that
 render only in JavaScript (some Tesla, Rubrik, Epic careers pages) come
 back empty and are rated from the title and company alone.

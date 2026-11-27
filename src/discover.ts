@@ -24,10 +24,7 @@ import { loadRows, saveRows, upsertEntry } from "./log/csv.js";
 import { usStatus, type Profile } from "./profile/schema.js";
 import type { Answer } from "./jev/types.js";
 import { KeyedCache } from "./util/cache.js";
-import { fetchAshbyBoard } from "./sources/ats/ashby.js";
-import { fetchGreenhouseBoard } from "./sources/ats/greenhouse.js";
-import { fetchLeverBoard } from "./sources/ats/lever.js";
-import { boardsFromJobs, type Board } from "./sources/companies.js";
+import { boardsFromJobs, readBoard } from "./sources/companies.js";
 import { fetchReadmeSources } from "./sources/githubReadme.js";
 import { resolveShortLinks } from "./sources/shortLinks.js";
 import { fetchSimplify } from "./sources/simplify.js";
@@ -105,11 +102,7 @@ export async function collectJobs(opts: DiscoverOptions = {}): Promise<Job[]> {
   if (opts.boards !== false) {
     const boards = boardsFromJobs(jobs);
     log(`[sources] polling ${boards.length} company boards`);
-    const results = await mapLimit(boards, DISCOVER.fetchConcurrency, (b: Board) =>
-      b.ats === "greenhouse" ? fetchGreenhouseBoard(b.slug, b.company)
-      : b.ats === "lever" ? fetchLeverBoard(b.slug, b.company)
-      : fetchAshbyBoard(b.slug, b.company),
-    );
+    const results = await mapLimit(boards, DISCOVER.fetchConcurrency, readBoard);
     let fromBoards = 0;
     results.forEach((r) => {
       if (!r.ok) return;

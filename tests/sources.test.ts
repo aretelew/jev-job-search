@@ -6,7 +6,10 @@ import { parseSheetCsv } from "../src/sources/sheetImport.js";
 import { findGreenhouseBoard, greenhouseFormFor, greenhouseJobId, greenhouseSlug, slugGuesses } from "../src/sources/ats/greenhouse.js";
 import { ashbyJobId, ashbySlug } from "../src/sources/ats/ashby.js";
 import { leverJobId, leverSlug } from "../src/sources/ats/lever.js";
+import { gemJobId, gemJobs, gemSlug } from "../src/sources/ats/gem.js";
 import { boardsFromJobs } from "../src/sources/companies.js";
+import { atsFromUrl, postingKey } from "../src/jobs/normalize.js";
+import { isEarlyCareerTitle } from "../src/discover.js";
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 const now = new Date("2026-10-02T12:00:00Z");
@@ -78,6 +81,35 @@ describe("ATS url helpers and board discovery", () => {
     const boards = boardsFromJobs(jobs, [{ ats: "greenhouse", slug: "doordashcanada", company: "DoorDash" }]);
     expect(boards.filter((b) => b.slug === "doordashcanada")).toHaveLength(1);
     expect(boards.some((b) => b.ats === "ashby" && /Superhuman/.test(b.slug))).toBe(true);
+  });
+});
+
+describe("a Gem board", () => {
+  const URL_ = "https://jobs.gem.com/nominal/am9icG9zdDqriogNmq5bb41RdlSlBulk";
+
+  it("knows a Gem posting link, its board and its id", () => {
+    expect(atsFromUrl(URL_)).toBe("gem");
+    expect(atsFromUrl("https://www.gem.com/careers")).toBe("other");
+    expect(gemSlug(URL_)).toBe("nominal");
+    expect(gemJobId(URL_)).toBe("am9icG9zdDqriogNmq5bb41RdlSlBulk");
+    expect(gemJobId("https://jobs.gem.com/nominal")).toBeNull();
+  });
+
+  it("reads every posting with its offices, date, team and description", () => {
+    const jobs = gemJobs(JSON.parse(fixture("gem-board.json")), "nominal", "Nominal");
+    expect(jobs.map((j) => j.title)).toEqual(["Software Engineer - Internship (Summer 2027)", "Software Engineer - Backend", "Mission Dev Engineer - Internship (Summer 2027)"]);
+    const intern = jobs[0];
+    expect(intern).toMatchObject({ source: "gem:nominal", company: "Nominal", ats: "gem", url: URL_, postedAt: "2026-09-10", category: "Software Engineering", descriptionSource: "api" });
+    expect(intern?.locations).toEqual(["New York, United States", "Los Angeles, United States", "Austin, United States"]);
+    expect(intern?.description).toMatch(/^About Nominal/);
+    expect(jobs.filter((j) => isEarlyCareerTitle(j.title)).map((j) => j.title)).toEqual(["Software Engineer - Internship (Summer 2027)", "Mission Dev Engineer - Internship (Summer 2027)"]);
+    expect(gemJobs({ error: "not found" }, "nominal", "Nominal")).toEqual([]);
+  });
+
+  it("is polled for a company a list links there, and keeps its postings apart", () => {
+    const jobs = gemJobs(JSON.parse(fixture("gem-board.json")), "nominal", "Nominal");
+    expect(boardsFromJobs(jobs.slice(0, 1), [])).toEqual([{ ats: "gem", slug: "nominal", company: "Nominal" }]);
+    expect(new Set(jobs.map((j) => postingKey(j.url))).size).toBe(3);
   });
 });
 

@@ -1,16 +1,30 @@
 /**
- * Company boards worth polling directly. Seeded from every Greenhouse,
- * Lever and Ashby URL the list sources mention (those companies are hiring
- * early-career now), plus a hand-kept list of boards that post Canadian and
- * remote early-career software roles. Polling the board catches postings the
- * lists have not picked up yet, which is where the freshest ones are.
+ * Company boards worth polling directly. Seeded from every Greenhouse, Lever, Ashby and Gem URL the
+ * list sources mention (those companies are hiring early-career now), plus a hand-kept list of
+ * boards that post Canadian and remote early-career software roles. Polling the board catches
+ * postings the lists have not picked up yet, which is where the freshest ones are.
  */
-import { greenhouseSlug } from "./ats/greenhouse.js";
-import { leverSlug } from "./ats/lever.js";
-import { ashbySlug } from "./ats/ashby.js";
+import { ashbySlug, fetchAshbyBoard } from "./ats/ashby.js";
+import { fetchGemBoard, gemSlug } from "./ats/gem.js";
+import { fetchGreenhouseBoard, greenhouseSlug } from "./ats/greenhouse.js";
+import { fetchLeverBoard, leverSlug } from "./ats/lever.js";
 import type { Job } from "../jobs/normalize.js";
 
-export type Board = { ats: "greenhouse" | "lever" | "ashby"; slug: string; company: string };
+/** Each board the tool can read whole: how a posting link names its board, and how the board is read. */
+const READERS = {
+  greenhouse: { slug: greenhouseSlug, read: fetchGreenhouseBoard },
+  lever: { slug: leverSlug, read: fetchLeverBoard },
+  ashby: { slug: ashbySlug, read: fetchAshbyBoard },
+  gem: { slug: gemSlug, read: fetchGemBoard },
+} satisfies Record<string, { slug: (url: string) => string | null; read: (slug: string, company: string) => Promise<Job[]> }>;
+
+export type Board = { ats: keyof typeof READERS; slug: string; company: string };
+
+const readable = (ats: string): ats is Board["ats"] => Object.hasOwn(READERS, ats);
+const boardKey = (b: Board) => `${b.ats}:${b.slug.toLowerCase()}`;
+
+/** Every posting on one board, read from its API. */
+export const readBoard = (b: Board): Promise<Job[]> => READERS[b.ats].read(b.slug, b.company);
 
 /** Boards polled on every discover run regardless of what the lists mention. */
 export const SEED_BOARDS: Board[] = [
@@ -92,25 +106,20 @@ export const SEED_BOARDS: Board[] = [
   { ats: "ashby", slug: "neofinancial", company: "Neo Financial" },
   { ats: "ashby", slug: "jobber", company: "Jobber" },
   { ats: "ashby", slug: "lightspeedhq", company: "Lightspeed" },
+  { ats: "gem", slug: "nominal", company: "Nominal" },
 ];
 
 /** Every board the given jobs point at, merged with the seed list, deduped by ats+slug. */
 export function boardsFromJobs(jobs: Job[], seeds: Board[] = SEED_BOARDS): Board[] {
   const map = new Map<string, Board>();
-  for (const b of seeds) map.set(`${b.ats}:${b.slug.toLowerCase()}`, b);
+  const add = (b: Board) => {
+    if (!map.has(boardKey(b))) map.set(boardKey(b), b);
+  };
+  seeds.forEach(add);
   for (const j of jobs) {
-    let b: Board | null = null;
-    if (j.ats === "greenhouse") {
-      const s = greenhouseSlug(j.url);
-      if (s) b = { ats: "greenhouse", slug: s, company: j.company };
-    } else if (j.ats === "lever") {
-      const s = leverSlug(j.url);
-      if (s) b = { ats: "lever", slug: s, company: j.company };
-    } else if (j.ats === "ashby") {
-      const s = ashbySlug(j.url);
-      if (s) b = { ats: "ashby", slug: s, company: j.company };
-    }
-    if (b && !map.has(`${b.ats}:${b.slug.toLowerCase()}`)) map.set(`${b.ats}:${b.slug.toLowerCase()}`, b);
+    if (!readable(j.ats)) continue;
+    const slug = READERS[j.ats].slug(j.url);
+    if (slug) add({ ats: j.ats, slug, company: j.company });
   }
   return [...map.values()];
 }
