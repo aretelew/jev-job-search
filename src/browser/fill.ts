@@ -49,7 +49,8 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
   };
   const plain = fills.filter((f) => f.kind !== "combobox" && f.kind !== "calendar");
   // A control known to ignore a value set from script is typed into straight away: no failed first try, no waiting.
-  const typeFirst = plain.filter((f) => TYPED_KINDS.has(f.kind) && guide?.prefer(f.selector) === "typed");
+  // Workday's date parts (a Month and a Year box) show a value set from script, but the form keeps only what was typed: "Invalid Date: 06/".
+  const typeFirst = plain.filter((f) => TYPED_KINDS.has(f.kind) && (guide?.prefer(f.selector) === "typed" || TYPED_DATE_PART.test(f.selector)));
   const simple = plain.filter((f) => !typeFirst.includes(f));
   page.takeWrites();
   const [first, ...rest] = simple;
@@ -155,6 +156,8 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
 const NO_SUCH_CHOICE = /^no option matches|opens a list of its own/;
 
 export const TYPED_KINDS = new Set(["text", "email", "tel", "url", "number", "textarea"]);
+/** A part of a Workday date ("#workExperience-8--startDate-dateSectionYear-input"): it keeps only what is typed into it. */
+const TYPED_DATE_PART = /dateSection(?:Month|Day|Year)-input/;
 
 /** Empties a text box the way a person does: the keyboard in it, everything selected, one key. */
 export function clearBox(page: Page, selector: string): Promise<boolean> {

@@ -430,8 +430,13 @@
     blur() {
       if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
     },
+    /**
+     * The error messages a page shows. Workday's class names are hashes, so its errors are found by their
+     * automation ids. A bare alert role is not taken: banners and "saved" notices use it too.
+     */
     errors() {
-      return [...document.querySelectorAll('[aria-invalid="true"], [class*="error" i]')].filter(visible).map(text).filter((t) => t && t.length < 200).slice(0, 20);
+      const found = [...document.querySelectorAll('[aria-invalid="true"], [class*="error" i], [data-automation-id*="error" i]')].filter(visible).map(text).filter((t) => t && t.length < 200);
+      return [...new Set(found)].slice(0, 20);
     },
     pageText() {
       return document.body ? document.body.innerText : "";
