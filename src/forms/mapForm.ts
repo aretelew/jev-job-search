@@ -204,6 +204,8 @@ const AGREEMENT_KINDS: Record<AgreementKind, RegExp> = {
   privacy: /\bprivacy\b|\bdata (?:protection|processing)\b|\bgdpr\b/i,
   /** Where and how the work is done: on site, in the office, hybrid, a city to move to. */
   workplace: WORKPLACE_Q,
+  /** That the application's terms and conditions, or terms of use, were read and accepted (Workday's last page). */
+  terms: /\bterms (?:and|&) (?:conditions|agreements)\b|\bterms of (?:use|service)\b/i,
 };
 
 /** True when the label is a kind of acknowledgment the person approved for every posting, and binds them to nothing more. */

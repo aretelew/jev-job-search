@@ -38,8 +38,9 @@ If `data/profile.json` does not exist, this is a first run: use the
      waits for the person, even routine ones.
    - `acceptedAgreements`: kinds of acknowledgment the person approved for
      every posting, even with `reviewAgreements`: `"privacy"` (an applicant
-     privacy notice or data processing notice) and `"workplace"` (that the
-     job is on site, in the office, hybrid, or in a city to move to). One
+     privacy notice or data processing notice), `"workplace"` (that the
+     job is on site, in the office, hybrid, or in a city to move to) and
+     `"terms"` (the application's terms and conditions or terms of use). One
      that also gives something up, such as arbitration or a background
      check, still waits for them.
    - `approvedAgreements`: answers the person approved for one posting:

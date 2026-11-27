@@ -11,8 +11,8 @@ import { PATHS } from "../config.js";
 const YesNo = z.enum(["yes", "no"]);
 /** A voluntary self-identification question may be declined. */
 const YesNoDecline = z.enum(["yes", "no", "decline"]);
-/** Kinds of acknowledgment a person may approve once for every posting: a privacy notice read, where the work is done. */
-export const AgreementKind = z.enum(["privacy", "workplace"]);
+/** Kinds of acknowledgment a person may approve once for every posting: a privacy notice read, where the work is done, the application's terms and conditions. */
+export const AgreementKind = z.enum(["privacy", "workplace", "terms"]);
 export type AgreementKind = z.infer<typeof AgreementKind>;
 
 export const ProfileSchema = z.object({
@@ -131,7 +131,7 @@ export const ProfileSchema = z.object({
     reviewAgreements: z.boolean().optional(),
     /** Explicit approval for one exact answer on one posting; other agreements still require review. */
     approvedAgreements: z.array(z.object({ jobId: z.string(), label: z.string(), value: z.string() })).optional(),
-    /** Kinds of acknowledgment approved for every posting, even with reviewAgreements: a privacy notice, where the work is done. */
+    /** Kinds of acknowledgment approved for every posting, even with reviewAgreements: a privacy notice, where the work is done, the application's terms and conditions. */
     acceptedAgreements: z.array(AgreementKind).optional(),
     /** Mandatory search conditions; ambiguous matches stay out of the application queue. */
     searchRequirements: z.string().optional(),

@@ -436,6 +436,13 @@ it("lets the kinds of acknowledgment approved for every posting go in, and nothi
   expect(gateAnswer(onSite, "I acknowledge", kinds, j)).toBeNull();
   expect(gateAnswer(both, "true", kinds, j)).toMatch(/approval/);
   expect(gateAnswer(terms, "true", kinds, j)).toMatch(/approval/);
+  // The application's terms and conditions, once the person approved that kind; arbitration under the same words still waits.
+  const withTerms = { ...profile, preferences: { ...strict.preferences, acceptedAgreements: ["terms"] as "terms"[] } };
+  const workday = field({ kind: "checkbox", label: "Yes, I have read and consent to the terms and conditions.", required: true });
+  expect(gateAnswer(workday, "true", withTerms, j)).toBeNull();
+  expect(gateAnswer(terms, "true", withTerms, j)).toBeNull();
+  expect(gateAnswer(field({ kind: "checkbox", label: "I accept the terms and conditions, including binding arbitration", required: true }), "true", withTerms, j)).toMatch(/approval/);
+  expect(gateAnswer(privacy, "I acknowledge", withTerms, j)).toMatch(/approval/);
 });
 
 it("reads an approved tick box the same however its value is spelled", () => {
