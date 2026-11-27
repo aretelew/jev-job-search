@@ -3,6 +3,16 @@
 // runner cannot do with real input events. Nothing here is page-supplied code.
 (() => {
   const q = (s) => document.querySelector(s);
+  // The options of one question that a radio or checkbox is one of, found as dumpFields.js found them: by name, or for
+  // a form that leaves the name off (Gem), the nameless options of the same kind in the nearest box holding more than one control.
+  const optionGroup = (el) => {
+    if (el.name) return [...document.querySelectorAll(`input[type=${el.type}][name="${attr(el.name)}"]`)];
+    for (let cur = el.parentElement, depth = 0; cur && cur !== document.body && depth < 6; cur = cur.parentElement, depth++) {
+      const controls = [...cur.querySelectorAll("input:not([type=hidden]), select, textarea")];
+      if (controls.length > 1) return controls.every((c) => c.type === el.type && !c.name) ? controls : [el];
+    }
+    return [el];
+  };
   // An attribute value inside a quoted CSS selector: backslashes and quotes escaped.
   const attr = (v) => v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   // The words of an element. An icon's fallback text ("SVGs not supported by this browser.") is not one of them.
@@ -385,8 +395,8 @@
       const el = q(sel);
       if (!el) return "";
       if (el.type === "checkbox" || el.type === "radio") {
-        if (el.type === "radio" && el.name) {
-          const on = [...document.querySelectorAll(`input[type=radio][name="${attr(el.name)}"]`)].find((r) => r.checked);
+        if (el.type === "radio") {
+          const on = optionGroup(el).find((r) => r.checked);
           return on ? text(on.closest("label") || (on.id && document.querySelector(`label[for="${CSS.escape(on.id)}"]`)) || on.parentElement) || on.value : "";
         }
         return el.checked ? "checked" : "";

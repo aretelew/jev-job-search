@@ -11,7 +11,8 @@ import { sleep, type Page } from "./cdp.js";
 import { pickDate } from "./calendar.js";
 import { showsPicked, showsValue } from "../util/dates.js";
 import { fillDropdown, fillDropdownByClicking, stalePill } from "./dropdowns.js";
-import { showsEvery, showsPlanned, ticks, type Failure, type Fill } from "./report.js";
+import { showsEvery, showsPlanned, type Failure, type Fill } from "./report.js";
+import { ticks } from "../forms/fields.js";
 import { controlStates, inTurn, script, shownValues, trace, type Point } from "./session.js";
 
 /** Applies fills to the open form. Returns the ones that did not land. */

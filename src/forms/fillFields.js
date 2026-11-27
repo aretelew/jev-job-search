@@ -13,6 +13,16 @@
   };
   const fire = (el, types) => types.forEach((t) => el.dispatchEvent(new Event(t, { bubbles: true, cancelable: true })));
   const norm = (s) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  // The options of one question that a radio or checkbox is one of, found as dumpFields.js found them: by name, or for
+  // a form that leaves the name off (Gem), the nameless options of the same kind in the nearest box holding more than one control.
+  const optionGroup = (el) => {
+    if (el.name) return [...document.querySelectorAll(`input[type=${el.type}][name="${attr(el.name)}"]`)];
+    for (let cur = el.parentElement, depth = 0; cur && cur !== document.body && depth < 6; cur = cur.parentElement, depth++) {
+      const controls = [...cur.querySelectorAll("input:not([type=hidden]), select, textarea")];
+      if (controls.length > 1) return controls.every((c) => c.type === el.type && !c.name) ? controls : [el];
+    }
+    return [el];
+  };
 
   for (const f of fills) {
     try {
@@ -40,8 +50,7 @@
         // A row drawn around a real radio or checkbox: the box is what the form listens to.
         (btn.querySelector("input[type=radio], input[type=checkbox]") || btn).click();
       } else if (f.kind === "radio") {
-        const name = el.name;
-        const group = name ? document.querySelectorAll(`input[type=radio][name="${attr(name)}"]`) : [el];
+        const group = optionGroup(el);
         const labelOf = (r) => { const l = (r.id && document.querySelector(`label[for="${CSS.escape(r.id)}"]`)) || r.closest("label") || r.parentElement; return norm(l && (l.innerText || l.textContent)); };
         let target = [...group].find((r) => labelOf(r) === norm(f.value));
         if (!target) target = [...group].find((r) => labelOf(r).includes(norm(f.value)));

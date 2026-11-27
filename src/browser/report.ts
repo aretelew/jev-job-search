@@ -8,7 +8,7 @@ import { writeAtomic } from "../util/store.js";
 import { hasWords, showsPicked, showsValue } from "../util/dates.js";
 import path from "node:path";
 import { FORM, PATHS } from "../config.js";
-import { checkboxGroups, type FieldsDump, type FillPlan } from "../forms/fields.js";
+import { checkboxGroups, ticks, type FieldsDump, type FillPlan } from "../forms/fields.js";
 import type { Resolution } from "../answers/memory.js";
 import type { ControlState } from "./session.js";
 import type { WaitingFor } from "../jobs/queue.js";
@@ -135,8 +135,6 @@ export const emptyRequired = (d: FieldsDump, plan: FillPlan, shown: string[], st
  * (showsValue); a choice by the option that was picked; a checkbox by whether it is ticked.
  * Anything else only has to show something.
  */
-/** True when a checkbox's value means ticked, however a caller spells it. */
-export const ticks = (value: string | null | undefined): boolean => /^(true|yes|1|on|checked)$/i.test(value ?? "");
 
 export function showsPlanned(f: { kind: string; value: string | null; optionLabel?: string | null; values?: string[] | undefined }, shown: string): boolean {
   const value = f.value ?? "";
@@ -217,9 +215,13 @@ export const SIGN_IN_REASON = "the site wants a sign-in or an account";
 
 const buttons = (submitSelectors: string[]) => submitSelectors.map((s) => ({ selector: s.split("  /*")[0] ?? s, text: /\/\*\s*(.*?)\s*\*\//.exec(s)?.[1] ?? "" }));
 
-/** The control that sends the form, from the buttons the dump found. English first, then the French a bilingual Canadian form uses. */
+/**
+ * The control that sends the form, from the buttons the dump found. English first, then the French a bilingual
+ * Canadian form uses. A button that also keeps the person's details on the board for next time (Gem's "Apply and
+ * save", beside "Apply without saving") is never the one: that is an account the person did not ask for.
+ */
 export function pickSubmit(submitSelectors: string[]): { selector: string; text: string } | null {
-  const candidates = buttons(submitSelectors);
+  const candidates = buttons(submitSelectors).filter((c) => !/\b(and|&) save\b/i.test(c.text));
   return candidates.find((c) => /submit|soumettre/i.test(c.text)) ?? candidates.find((c) => /apply|send|finish|postuler|envoyer/i.test(c.text) && !/linkedin|indeed/i.test(c.text)) ?? null;
 }
 

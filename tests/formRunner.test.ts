@@ -71,6 +71,12 @@ describe("the in-page scripts", () => {
     const src = readFileSync(new URL(`../src/forms/${name}`, import.meta.url), "utf8").replace("__PLAN__", "[]");
     expect(() => new Function(`return ${src.replace(/^\s*\/\/.*$/gm, "").trim().replace(/;$/, "")}`)).not.toThrow();
   });
+  it("finds a question's options the same way in all three, so what is read is what is set and read back", () => {
+    const optionGroup = (name: string) => /const optionGroup = \(el\) => \{\n[\s\S]*?\n {2}\};/.exec(readFileSync(new URL(`../src/forms/${name}`, import.meta.url), "utf8"))?.[0];
+    const copies = ["dumpFields.js", "fillFields.js", "pageHelpers.js"].map(optionGroup);
+    expect(copies[0]).toMatch(/nameless|!c\.name/);
+    expect(new Set(copies).size).toBe(1);
+  });
   it("never dumps a password box and reports that one is present", () => {
     const src = readFileSync(new URL("../src/forms/dumpFields.js", import.meta.url), "utf8");
     expect(src).toMatch(/SKIP_TYPES = new Set\(\[[^\]]*"password"/);
@@ -115,6 +121,9 @@ describe("the button that sends a form", () => {
     expect(pickSubmit(["#a  /* Apply with LinkedIn */"])).toBeNull();
     expect(pickSubmit(["#s  /* Soumettre la candidature */"])?.selector).toBe("#s");
     expect(pickSubmit(["#p  /* Postuler */"])?.selector).toBe("#p");
+    // Gem's "Apply and save" also keeps the person's details on the board: the plain one is pressed, and never that one.
+    expect(pickSubmit(["#save  /* Apply and save */", "#plain  /* Apply without saving */"])?.selector).toBe("#plain");
+    expect(pickSubmit(["#save  /* Apply and save */"])).toBeNull();
   });
   it("finds the way to the next page only when the page has no way to send", () => {
     expect(pickNext(['button[name="next"]  /* Next */'])?.selector).toBe('button[name="next"]');

@@ -43,6 +43,9 @@ export type DumpedField = z.infer<typeof DumpedField>;
  * The question each checkbox answers, by selector: the boxes that share a name, or, when each box
  * has a name of its own (Ashby), the boxes under one question. "" for a box that stands alone.
  */
+/** True when a checkbox's value means ticked, however a caller spells it. */
+export const ticks = (value: string | null | undefined): boolean => /^(true|yes|1|on|checked)$/i.test(value ?? "");
+
 export function checkboxGroups(fields: Pick<DumpedField, "kind" | "selector" | "name" | "section">[]): Map<string, string> {
   const boxes = fields.filter((f) => f.kind === "checkbox");
   return new Map(boxes.map((f) => [f.selector, f.name && boxes.filter((o) => o.name === f.name).length > 1 ? `name:${f.name}` : f.section ? `question:${f.section}` : ""]));

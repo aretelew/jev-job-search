@@ -8,7 +8,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { BROWSER, FORM, MEMORY, PATHS, RUN } from "../config.js";
-import { isApplicationForm, type DumpedField, type FieldsDump, type FillPlan } from "../forms/fields.js";
+import { isApplicationForm, ticks, type DumpedField, type FieldsDump, type FillPlan } from "../forms/fields.js";
 import { gateAnswer, hasChoosableOptions, mapForm } from "../forms/mapForm.js";
 import { decidePageState } from "../forms/pageState.js";
 import type { JevClient } from "../jev/client.js";
@@ -24,7 +24,7 @@ import { openSections } from "./sections.js";
 import { applyFills, clearBox, TYPED_KINDS, uploadFile, type FillGuide } from "./fill.js";
 import { isProfileKey } from "../profile/fieldKeys.js";
 import { learn, notesFor, signatureOf, type Method } from "../knowledge/sites.js";
-import { blockedReport, comparePages, fieldsBlamed, notOnScreen, showsAnother, showsPlanned, emptyRequired, emptyRequiredFields, isClean, isReady, loadPlan, loadReport, pickNext, savePlan, saveReport, SIGN_IN_REASON, splitFailures, ticks, type Failure, type FieldReport, type Fill, type FillReport } from "./report.js";
+import { blockedReport, comparePages, fieldsBlamed, notOnScreen, showsAnother, showsPlanned, emptyRequired, emptyRequiredFields, isClean, isReady, loadPlan, loadReport, pickNext, savePlan, saveReport, SIGN_IN_REASON, splitFailures, type Failure, type FieldReport, type Fill, type FillReport } from "./report.js";
 import { signInFor } from "../accounts/gate.js";
 import { adapterFor } from "../accounts/capability.js";
 import { liveStep } from "../run/live.js";

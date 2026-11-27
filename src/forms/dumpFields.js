@@ -6,6 +6,7 @@
   const SKIP_TYPES = new Set(["hidden", "submit", "button", "reset", "image", "search", "password"]);
   // Long enough for a question that follows a paragraph of legal text: the question is usually at the end.
   const LABEL_MAX = 700;
+  // Every radio already read as one of a group's options.
   const seenRadio = new Set();
   const fields = [];
   const out = { url: location.href, title: document.title, context: "", fields, submitSelectors: [] };
@@ -27,6 +28,17 @@
   const attr = (v) => v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   const cssEscape = (s) => (window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/([^\w-])/g, "\\$1"));
   const unique = (s) => { try { return document.querySelectorAll(s).length === 1; } catch { return false; } };
+  // The options of one question that a radio or checkbox is one of. A name ties them together; a form that leaves it
+  // off (Gem) draws a question's options in one box, so they are the nameless options of the same kind in the nearest
+  // box holding more than one control.
+  const optionGroup = (el) => {
+    if (el.name) return [...document.querySelectorAll(`input[type=${el.type}][name="${attr(el.name)}"]`)];
+    for (let cur = el.parentElement, depth = 0; cur && cur !== document.body && depth < 6; cur = cur.parentElement, depth++) {
+      const controls = [...cur.querySelectorAll("input:not([type=hidden]), select, textarea")];
+      if (controls.length > 1) return controls.every((c) => c.type === el.type && !c.name) ? controls : [el];
+    }
+    return [el];
+  };
   // Ids a UI library numbers on each render (FabricTextField-349, :r1:, radix-12) can change under us, so they are not used to find a field again.
   // An id that merely ends in digits (question_8595663005, school--0) is the form's own and stays put.
   // A run of twelve or more letters and digits in both cases (nNpgf9k9eygQEJqI) is drawn at random on each render.
@@ -169,7 +181,8 @@
   // The question above a group of options on a form that writes it as plain text, with no label or legend.
   // The walk stops at another question's controls, so an option never takes the question of the group before it.
   const optionQuestionFor = (el) => {
-    const sameGroup = (node) => [...node.querySelectorAll("input, select, textarea")].every((i) => i.type === el.type && !!el.name && i.name === el.name);
+    const peers = optionGroup(el);
+    const sameGroup = (node) => [...node.querySelectorAll("input, select, textarea")].every((i) => peers.includes(i));
     let cur = el;
     for (let depth = 0; cur && cur !== document.body && depth < 8; depth++, cur = cur.parentElement) {
       let sib = cur.previousElementSibling;
@@ -347,11 +360,10 @@
     }
 
     if (kind === "radio") {
-      const key = el.name || f.selector;
-      if (seenRadio.has(key)) { i--; return; }
-      seenRadio.add(key);
-      const group = el.name ? document.querySelectorAll(`input[type=radio][name="${attr(el.name)}"]`) : [el];
+      const group = optionGroup(el);
+      if (group.some((r) => seenRadio.has(r))) { i--; return; }
       group.forEach((r) => {
+        seenRadio.add(r);
         const l = (r.id && document.querySelector(`label[for="${cssEscape(r.id)}"]`)) || r.closest("label");
         f.options.push({ value: r.value, label: text(l) || r.value });
         if (r.checked) f.value = r.value;
@@ -364,6 +376,8 @@
         let cur = el.parentElement, depth = 0;
         while (cur && depth < 5) { const l = cur.querySelector("legend, label, [class*=label i], h2, h3, h4"); if (l && text(l) && !f.options.some((o) => o.label === text(l))) { f.label = text(l); break; } cur = cur.parentElement; depth++; }
       }
+      // A question written as plain text above its options names the group better than one of the options does.
+      if (f.options.some((o) => o.label === f.label) && f.section) f.label = f.section;
       // The mark that a group is required sits on its question, not on its options.
       const box = el.closest("fieldset, [role=radiogroup], [class*=field-entry i], [class*=fieldEntry]");
       const head = box && [...box.querySelectorAll("legend, label, [class*=question-title i]")].find((h) => !h.querySelector("input") && !f.options.some((o) => o.label === text(h)));
@@ -412,7 +426,7 @@
   const seenGroup = new Set();
   groupContainers.forEach((c) => {
     // A radiogroup drawn with role=radio rows keeps its real inputs invisible; it is read through the rows.
-    const drawnRadios = c.getAttribute("role") === "radiogroup" && c.querySelector("[role=radio]") && ![...c.querySelectorAll("input[type=radio]")].some((r) => seenRadio.has(r.name || ""));
+    const drawnRadios = c.getAttribute("role") === "radiogroup" && c.querySelector("[role=radio]") && ![...c.querySelectorAll("input[type=radio]")].some((r) => seenRadio.has(r));
     // Skip a container whose control was already read. An input nobody can see (Ashby keeps a hidden checkbox
     // behind its Yes and No buttons) does not count: the buttons are the control.
     if (!drawnRadios && [...c.querySelectorAll("input, select, textarea")].some((x) => x.type !== "hidden" && (dumped.has(x) || visible(x)))) return;

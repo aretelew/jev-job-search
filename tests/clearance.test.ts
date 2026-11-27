@@ -33,4 +33,12 @@ describe("a clearance the candidate said they do not hold", () => {
     expect(clearanceHold(agency, "DOD", unsaid)).toBeNull();
     expect(clearanceHold(field("Which programming languages do you know?"), "DOD", none)).toBeNull();
   });
+
+  it("reads a ticked box in a list of levels by its own words", () => {
+    const level = (label: string): DumpedField => ({ ...field(label), kind: "checkbox", section: "Clearance Level - Which U.S. security clearance do you hold, or have you held?" });
+    expect(clearanceHold(level("N/A - have never held a U.S. security clearance"), "true", none)).toBeNull();
+    expect(clearanceHold(level("Top Secret"), "true", none)).not.toBeNull();
+    expect(clearanceHold(level("Secret"), "false", none)).toBeNull();
+    expect(clearanceHold(level("Top Secret"), "true", unsaid)).toBeNull();
+  });
 });

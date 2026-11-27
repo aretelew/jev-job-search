@@ -19,7 +19,7 @@ import { candidatePreferences, monthName, sponsorshipLater, type AgreementKind, 
 import { BANK_INTENTS } from "../answers/bank.js";
 import { countryOfLocations, locationTier } from "../jobs/hardFilters.js";
 import type { Job } from "../jobs/normalize.js";
-import type { DumpedField, FieldsDump, FillPlan, PlannedField } from "./fields.js";
+import { ticks, type DumpedField, type FieldsDump, type FillPlan, type PlannedField } from "./fields.js";
 import { documentPolicy, documentsFor, tailorJob } from "../documents/tailor.js";
 import { loadQueue } from "../jobs/queue.js";
 import { planLocations } from "./locations.js";
@@ -98,7 +98,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 32;
+const PLAN_VERSION = 33;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -321,12 +321,17 @@ const NO_CLAIM = /^\s*(?:no\b|none\b|n\/?a\b|not applicable|i do not\b|i don'?t\
 /**
  * Why an answer about a clearance the candidate holds may not go in: the person said they hold none,
  * and the answer claims one ("DOD", "Secret"). Only an answer that claims nothing passes then.
+ * A box in a list of levels answers its group's question with its own words: a ticked "Top Secret"
+ * claims one, a ticked "N/A - have never held a clearance" claims nothing, and an unticked box says nothing.
  */
 export function clearanceHold(f: Gated, value: string, profile: Profile): string | null {
-  if (!heldClearanceQ(f.label) || !value.trim() || NO_CLAIM.test(value)) return null;
+  const box = f.kind === "checkbox";
+  const question = box ? `${f.section} ${f.label}` : f.label;
+  const answer = box ? (ticks(value.trim()) ? f.label : "") : value;
+  if (!heldClearanceQ(question) || !answer.trim() || NO_CLAIM.test(answer)) return null;
   const holdsNone = saidAbout(profile, heldClearanceQ).some((a) => polarity(a) === "No" || NO_CLAIM.test(a));
   if (!holdsNone) return null;
-  return `"${value.slice(0, 40)}" claims a clearance, and the profile says the candidate holds none`;
+  return `"${answer.slice(0, 40)}" claims a clearance, and the profile says the candidate holds none`;
 }
 
 /**
