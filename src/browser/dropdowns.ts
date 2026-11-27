@@ -6,7 +6,7 @@
 import { BROWSER, FORM } from "../config.js";
 import type { DumpedField } from "../forms/fields.js";
 import { sleep, type Page } from "./cdp.js";
-import { inFront, norm, shownValues, trace, type Point } from "./session.js";
+import { inTurn, norm, shownValues, trace, type Point } from "./session.js";
 import { CHOICE_PATH, showsValue } from "../util/dates.js";
 
 /** Polls an open dropdown until its options settle, or until `enough` says the wanted one has arrived. */
@@ -145,7 +145,7 @@ export async function readOptions(page: Page, selector: string): Promise<string[
     await page.awj("reactMenu", selector, false);
     return loaded;
   }
-  return inFront(page, async () => {
+  return inTurn(async () => {
     if (!(await openDropdown(page, selector))) return [];
     const seen = await waitOptions(page, selector, false);
     await closeDropdown(page);
@@ -229,7 +229,7 @@ export async function fillDropdown(page: Page, selector: string, value: string, 
 export type Picked = { picked?: string | undefined };
 
 export function fillDropdownByClicking(page: Page, selector: string, value: string, hints: string[], out?: Picked): Promise<string | null> {
-  return inFront(page, () => clickAndPick(page, selector, value, hints, out));
+  return inTurn(() => clickAndPick(page, selector, value, hints, out));
 }
 
 /**

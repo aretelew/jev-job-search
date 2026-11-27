@@ -55,6 +55,8 @@ export const PATHS = {
   dailyStop: path.join(ROOT, "data", "runs", "daily.stop"),
   /** What the scheduled run prints. */
   dailyLog: path.join(ROOT, "data", "runs", "daily.log"),
+  /** What the run working now is doing, written by that run as it goes, for the dashboard's live panel. */
+  live: path.join(ROOT, "data", "runs", "live.json"),
   /** The job-board accounts the person allowed, and the rule for making new ones. No secret is in it. */
   accounts: path.join(ROOT, "data", "accounts.json"),
   accountsExample: path.join(ROOT, "data", "accounts.example.json"),
@@ -79,6 +81,8 @@ export const PATHS = {
   outreach: path.join(ROOT, "data", "outreach.json"),
   /** JEV's answers about who a person found on LinkedIn is, kept so an unchanged card is not asked about again. */
   outreachKinds: path.join(ROOT, "data", "cache", "outreach-kinds.json"),
+  /** Technical facts about each company from its public pages, one file per company, for the writer to draw on. */
+  companyNotes: path.join(ROOT, "data", "cache", "companies"),
   /** The same people as a sheet to open, written after every change to the record. Git-ignored with the rest of applications/. */
   people: path.join(ROOT, "applications", "people.csv"),
 } as const;
@@ -259,6 +263,8 @@ export const FORM = {
   maxListPicks: 8,
   /** A standing answer to "how did you hear about us" this short is a source's name ("LinkedIn"), tried on a list that has no generic choice; a longer one is a rule for the writer. */
   maxSourceWords: 4,
+  /** Working hours in a year, for turning the person's yearly pay figure into an hourly rate. */
+  hoursPerYear: 2080,
   /** How many extra copies of an attached file are taken off a form that kept them from earlier visits. */
   maxExtraCopies: 5,
   /** How many screens of a list that only draws the rows in view are gone through, and how many of its choices are named when none fits. */
@@ -318,6 +324,11 @@ export const BROWSER = {
   get chromePath(): string {
     return findChrome();
   },
+  /** How long a call to the browser itself (not a tab) may take before the tool falls back, as when opening a form's own window. */
+  browserCallMs: 5_000,
+  /** Size of the runner's Chrome window, and of the window each form opens in. */
+  windowWidth: 1280,
+  windowHeight: 1000,
   /** Local DevTools port of the runner's own Chrome window. */
   port: 9333,
   /** Its profile lives with the other run data, so it is git-ignored and keeps cookies between runs. */
@@ -394,6 +405,30 @@ export const WRITER = {
    * address, and WRITER_MODEL names the model; there is no default one.
    */
   openai: { baseUrl: "https://api.openai.com/v1" },
+} as const;
+
+/**
+ * The company research step (src/answers/research.ts): before the writer answers a question about a
+ * company, one call with web search looks up a few technical facts about it from public pages. It is
+ * told the company and the posting and nothing about the candidate, and its facts are cached per company.
+ */
+export const RESEARCH = {
+  effort: "low",
+  /** Facts kept per company, at most, and the longest one kept. A longer one is dropped, not cut. */
+  maxFacts: 6,
+  maxFactChars: 320,
+  /** Posting characters sent along so the search finds the right company when the name is common. */
+  maxPostingChars: 1_500,
+  /** Searches one Claude API research call may make, and what Anthropic charges for each. */
+  maxSearches: 5,
+  searchUsd: 0.01,
+  /** How long a company's facts are reused, and how long a search that found nothing is believed. */
+  keepDays: 30,
+  emptyKeepDays: 3,
+  /** A text box at least this long is an open question worth researching for, whatever it asks. */
+  longTextChars: 200,
+  /** A shorter box is researched for only when its question is about them: why them, their product, team or work. */
+  asksAboutThem: /\bwhy\b|interest|excite|appeal|attract|drawn|our (product|platform|team|mission|company|work|system)|work on|would you (most )?(like|want)/i,
 } as const;
 
 /** Tailored resumes and cover letters, written per job from the profile and rendered to PDF by the runner's Chrome. */
@@ -586,6 +621,13 @@ export const REPORT = {
   chartDays: 14,
   /** The statuses the page lets a person set, in the order they are offered. */
   statuses: ["applied", "needs_review", "queued", "skipped", "blocked", "failed"],
+  /** How often the page asks what a run is doing while one works, and while none does. */
+  livePollMs: 1_500,
+  idlePollMs: 6_000,
+  /** How long after a run ends the overview still shows what it did. */
+  lastRunHours: 12,
+  /** How many of a run's latest steps the live panel keeps. */
+  liveEvents: 80,
 } as const;
 
 /**

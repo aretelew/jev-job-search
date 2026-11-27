@@ -5,8 +5,9 @@
  * several pages is walked with its own Next button once a page is clean.
  * Nothing here sends an application: that is submit.ts.
  */
+import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { BROWSER, FORM, MEMORY, RUN } from "../config.js";
+import { BROWSER, FORM, MEMORY, PATHS, RUN } from "../config.js";
 import { isApplicationForm, type DumpedField, type FieldsDump, type FillPlan } from "../forms/fields.js";
 import { gateAnswer, hasChoosableOptions, mapForm } from "../forms/mapForm.js";
 import { decidePageState } from "../forms/pageState.js";
@@ -16,14 +17,17 @@ import type { Profile } from "../profile/schema.js";
 import { loadMemory, recallExact, recallForm, recallSameFields, recallSimilar, remember, saveMemory, type Recalled } from "../answers/memory.js";
 import { contextFingerprint, resolveOpenFields, type OpenField, type Resolution } from "../answers/resolve.js";
 import type { QueueEntry } from "../jobs/queue.js";
-import { closeTab, ensureBrowser, newTab, Page, sleep } from "./cdp.js";
+import { closeTab, ensureBrowser, newBackgroundWindow, Page, sleep } from "./cdp.js";
 import { candidateOptions, closestOptions, readDropdownOptions } from "./dropdowns.js";
+import { openSections } from "./sections.js";
 import { applyFills, clearBox, TYPED_KINDS, uploadFile, type FillGuide } from "./fill.js";
 import { isProfileKey } from "../profile/fieldKeys.js";
 import { learn, notesFor, signatureOf, type Method } from "../knowledge/sites.js";
-import { blockedReport, comparePages, fieldsBlamed, notOnScreen, showsAnother, showsPlanned, emptyRequired, emptyRequiredFields, isClean, isReady, loadPlan, loadReport, pickNext, savePlan, saveReport, SIGN_IN_REASON, splitFailures, type Failure, type FieldReport, type Fill, type FillReport } from "./report.js";
+import { blockedReport, comparePages, fieldsBlamed, notOnScreen, showsAnother, showsPlanned, emptyRequired, emptyRequiredFields, isClean, isReady, loadPlan, loadReport, pickNext, savePlan, saveReport, SIGN_IN_REASON, splitFailures, ticks, type Failure, type FieldReport, type Fill, type FillReport } from "./report.js";
 import { signInFor } from "../accounts/gate.js";
-import { controlStates, dump, goto, inFront, inTurn, install, loadSession, mutateSession, pageFor, settle, shownValues, trace, type Point } from "./session.js";
+import { adapterFor } from "../accounts/capability.js";
+import { liveStep } from "../run/live.js";
+import { controlStates, dump, goto, inTurn, install, loadSession, mutateSession, pageFor, settle, shownValues, trace, type Point } from "./session.js";
 
 /** The text of a button that leads from a posting to its form. */
 const APPLY_BUTTON = "^\\s*(apply|apply now|apply for this job|apply to this job|apply for this position|start application|i'm interested)\\s*[»›→>]*\\s*$";
@@ -68,10 +72,10 @@ export async function fillJob(jev: JevClient, profile: Profile, job: Job, opts: 
   const signal = opts.signal;
   await ensureBrowser();
   const old = loadSession()[job.id];
-  // Opening a tab puts it in front, so it waits its turn behind any typing in another tab.
+  // Each form gets a window of its own, opened behind the person's work. It still waits its turn behind any typing in another tab.
   const target = await inTurn(async () => {
     if (old) await closeTab(old.targetId);
-    return newTab("about:blank");
+    return newBackgroundWindow("about:blank");
   });
   const page = await Page.attach(target);
   const seconds = () => (Date.now() - started) / 1000;
@@ -79,12 +83,14 @@ export async function fillJob(jev: JevClient, profile: Profile, job: Job, opts: 
     let d = await openForm(page, job);
     trace(`${job.company}: form open ${Date.now() - started}ms, ${d.fields.length} fields`);
     signal?.throwIfAborted();
+    liveStep(job.id, "opening", `Form open: ${d.fields.length} field${d.fields.length === 1 ? "" : "s"} on its first page`);
     // Read and written in one synchronous step, so jobs filled side by side do not overwrite each other.
     mutateSession((s) => {
       s[job.id] = { targetId: target.id, url: d.url, state: "filling", since: new Date().toISOString() };
     });
     // A board the tool can sign in to: the person's account is used, or made where they allowed it. Anything the
     // sign-in cannot finish with certainty comes back as what the job now waits for.
+    if (adapterFor(applyUrlFor(job))) liveStep(job.id, "signing_in", "Signing in to the board");
     const auth = await signInFor(page, applyUrlFor(job), { rehearsal: !!opts.dry });
     // An attempt that ran out of time was replaced by another: it must not write over that one's report.
     signal?.throwIfAborted();
@@ -140,6 +146,9 @@ export const UNFIT = /opens a list of its own|no option matches/;
 
 /** Fills the page the tab shows, from its dump, and reports what the page holds afterwards. */
 async function fillPage(page: Page, jev: JevClient, profile: Profile, job: Job, d: FieldsDump, at: { page: number; earlier: FieldReport[]; started: number; jevCostUsd?: number; signal?: AbortSignal }): Promise<FillReport> {
+  liveStep(job.id, "mapping", `Page ${at.page}: deciding what goes in each of ${d.fields.length} fields`, at.page);
+  // Sections closed behind an "Add" button (Workday's Education, Languages) are opened when the profile can fill them; the re-read below takes in their boxes.
+  await openSections(page, profile);
   await readDropdownOptions(page, d.fields);
   // A page that was still drawing itself when it was read has more on it now (Workday brings its sections in one by one).
   // It is read again, so the plan is made from the whole page and not from its first half.
@@ -164,6 +173,7 @@ async function fillPage(page: Page, jev: JevClient, profile: Profile, job: Job, 
   trace(`${job.company}: mapped ${Date.now() - at.started}ms`);
   // The resume goes in first: some boards (Lever) read it and write what they find into the form,
   // and the profile's values have to be the ones that stay.
+  liveStep(job.id, "filling", `Page ${at.page}: filling ${plan.fills.length} field${plan.fills.length === 1 ? "" : "s"}${plan.uploads.length ? ` and attaching ${plan.uploads.length} file${plan.uploads.length === 1 ? "" : "s"}` : ""}`, at.page);
   const uploaded = new Set<string>();
   const uploadFailures: Failure[] = [];
   for (const u of plan.uploads) {
@@ -172,7 +182,7 @@ async function fillPage(page: Page, jev: JevClient, profile: Profile, job: Job, 
     if (await page.awj<boolean>("showsFile", path.basename(u.path)).catch(() => false)) {
       let removed = 0;
       for (let p = await page.awj<Point>("extraCopy", path.basename(u.path)); p.ok && removed < FORM.maxExtraCopies; p = await page.awj<Point>("extraCopy", path.basename(u.path))) {
-        await inFront(page, () => page.click(p.x, p.y));
+        await inTurn(() => page.click(p.x, p.y));
         await sleep(BROWSER.pollMs * 4);
         removed++;
       }
@@ -224,6 +234,7 @@ async function fillPage(page: Page, jev: JevClient, profile: Profile, job: Job, 
   // An attempt that ran out of time was replaced by another: it must not write over that one's plan or report.
   at.signal?.throwIfAborted();
   savePlan(job.id, d, plan);
+  liveStep(job.id, "checking", `Page ${at.page}: reading every value back from the page`, at.page);
   const read = await readBack(page, d, plan, failedRaw, uploaded);
   guide.learn([...read.failed, ...read.leftBlank]);
   const partial = { jobId: job.id, company: job.company, title: job.title, ats: job.ats, ...read, takeHome: d.takeHome, page: at.page, earlier: at.earlier, hasNext: !!pickNext(plan.submitSelectors), seconds: (Date.now() - at.started) / 1000, jevCostUsd: (at.jevCostUsd ?? 0) + plan.jevCostUsd };
@@ -319,7 +330,7 @@ export async function nextPage(jev: JevClient, profile: Profile, job: Job, opts:
     }
     await page.writesSettled(BROWSER.saveMs);
     const was = pageSignature(before);
-    await inFront(page, async () => {
+    await inTurn(async () => {
       const p = await page.awj<Point>("point", next.selector);
       if (!p.ok) throw new Error(`The "${next.text}" button is not on the page.`);
       await page.click(p.x, p.y);
@@ -340,6 +351,11 @@ export async function nextPage(jev: JevClient, profile: Profile, job: Job, opts:
     }
     if (!moved) {
       const errors = await page.evaluate<string[]>("window.__awj.errors()");
+      // With the trace on, a page that would not move is kept as a picture for the person to look at (data/runs, never in git).
+      if (process.env.AWJ_TRACE && !errors.length) {
+        const shot = await page.send<{ data: string }>("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }).catch(() => null);
+        if (shot) writeFileSync(path.join(PATHS.runs, `${job.id}.stuck.png`), Buffer.from(shot.data, "base64"));
+      }
       const refusals = (r.refusals ?? 0) + 1;
       if (refusals <= RUN.nextRetries) {
         // The form says which boxes it objects to: those go back to the writer and the page is tried again. A form
@@ -434,7 +450,9 @@ async function readBack(page: Page, d: FieldsDump, plan: FillPlan, failedRaw: Fa
   plan.fields.forEach((f, i) => {
     if (states[i] === "off" || failed.some((x) => x.selector === f.selector)) return;
     const shownNow = fields[i]?.shown ?? "";
-    if ((f.action === "fill" || f.action === "upload") && !shownNow) {
+    // A box the plan unticks shows nothing when it is right; showsPlanned below says so.
+    const unticked = f.kind === "checkbox" && f.action === "fill" && !ticks(f.value);
+    if ((f.action === "fill" || f.action === "upload") && !shownNow && !unticked) {
       failed.push({ selector: f.selector, why: states[i] === "missing" ? "the control is no longer on the page" : "the value is not confirmed on the page" });
     } else if (f.action === "fill" && f.value && !showsPlanned(f, shownNow)) {
       failed.push({ selector: f.selector, why: `the page shows "${shownNow.slice(0, 40)}" instead of "${(f.optionLabel ?? f.value).slice(0, 40)}"` });
@@ -539,7 +557,7 @@ export async function resolveJob(profile: Profile, entry: QueueEntry | null, job
     }
     const fills: Fill[] = resolution.answers
       .map((a) => ({ selector: a.selector, kind: open.get(a.selector)?.kind ?? "text", value: a.value }))
-      .filter((f) => !(f.kind === "checkbox" && !/^(true|yes|1|on|checked)$/i.test(f.value)));
+      .filter((f) => !(f.kind === "checkbox" && !ticks(f.value)));
     let failedRaw: Failure[] = [...(await applyFills(page, fills, profile, guideFor(d))), ...r.failed.filter((x) => dumped(x.selector)?.kind === "file").map(({ selector, why }) => ({ selector, why }))];
     // An answer that named a heading, where the box already held a choice under that heading, is written down as the whole
     // path ("Job Board > Other"): the read-back, the memory and the check before Submit then all read the box the same way.

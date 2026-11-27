@@ -6,13 +6,13 @@
 import path from "node:path";
 import { BROWSER } from "../config.js";
 import type { Method } from "../knowledge/sites.js";
-import type { Profile } from "../profile/schema.js";
+import { basedIn, type Profile } from "../profile/schema.js";
 import { sleep, type Page } from "./cdp.js";
 import { pickDate } from "./calendar.js";
 import { showsPicked, showsValue } from "../util/dates.js";
 import { fillDropdown, fillDropdownByClicking, stalePill } from "./dropdowns.js";
-import { showsEvery, showsPlanned, type Failure, type Fill } from "./report.js";
-import { controlStates, inFront, script, shownValues, trace, type Point } from "./session.js";
+import { showsEvery, showsPlanned, ticks, type Failure, type Fill } from "./report.js";
+import { controlStates, inTurn, script, shownValues, trace, type Point } from "./session.js";
 
 /** Applies fills to the open form. Returns the ones that did not land. */
 /** What the tool already knows about a site's controls, and where it reports what it finds out. */
@@ -37,7 +37,9 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
   const fills = wanted.filter((f, i) => stale.has(f.selector) || !rightAlready(f, before[i] ?? ""));
   if (fills.length < wanted.length) trace(`${wanted.length - fills.length} of ${wanted.length} box(es) already show their value and are left alone`);
   const how = new Map<string, Method>();
-  const hints = [profile.address.city, profile.address.region, profile.address.regionCode, profile.address.country];
+  // The places that tell a list's options apart: where the person is based (a Location list) and the mailing address (the address fields).
+  const at = basedIn(profile);
+  const hints = [...new Set([at.city, at.region, at.regionCode, profile.address.city, profile.address.region, profile.address.regionCode, profile.address.country])].filter(Boolean);
   // fillFields.js is a function expression under a comment header; the protocol wants the bare expression.
   const fillScript = script("fillFields.js").replace(/^(\s*\/\/.*\n)+/, "").trim().replace(/;$/, "");
   const setFields = async (some: Fill[]) => {
@@ -139,7 +141,7 @@ export async function applyFills(page: Page, wanted: Fill[], profile: Profile, g
     const landed = !!shown[i] && (f.kind === "combobox" ? tookChoice(f, shown[i] ?? "") : !TYPED_KINDS.has(f.kind) || showsValue(f.value, shown[i] ?? ""));
     if (landed) guide?.landed(f.selector, how.get(f.selector) ?? "script");
     if (landed || failed.some((x) => x.selector === f.selector)) continue;
-    if (f.kind === "checkbox" && !/^(true|yes|1|on|checked)$/i.test(f.value)) continue;
+    if (f.kind === "checkbox" && !ticks(f.value)) continue;
     const why = f.kind === "combobox" ? (f.values?.length ? (await pickEach(page, f, hints, true)).why : await fillDropdownByClicking(page, f.selector, f.value, hints, f)) : TYPED_KINDS.has(f.kind) ? await typeInto(page, f.selector, f.value) : f.kind === "radio" ? await clickGroupOption(page, f.selector, f.value) : "the page did not keep the value";
     const after = (await shownValues(page, [f.selector]))[0] ?? "";
     if (why || !after) failed.push({ selector: f.selector, why: why ?? "the page did not keep the value" });
@@ -156,7 +158,7 @@ export const TYPED_KINDS = new Set(["text", "email", "tel", "url", "number", "te
 
 /** Empties a text box the way a person does: the keyboard in it, everything selected, one key. */
 export function clearBox(page: Page, selector: string): Promise<boolean> {
-  return inFront(page, async () => {
+  return inTurn(async () => {
     const p = await page.awj<Point>("point", selector);
     if (!p.ok) return false;
     await page.click(p.x, p.y);
@@ -199,7 +201,7 @@ export function rightAlready(f: Fill, shown: string): boolean {
 
 /** Types into a field with real key input, for the rare control that ignores a value set from script. */
 function typeInto(page: Page, selector: string, value: string): Promise<string | null> {
-  return inFront(page, async () => {
+  return inTurn(async () => {
     const p = await page.awj<Point>("point", selector);
     if (!p.ok) return "control not found";
     await page.click(p.x, p.y);
@@ -227,7 +229,7 @@ function typeInto(page: Page, selector: string, value: string): Promise<string |
 
 /** Picks a choice in a button group or a drawn radio row with a real click, for the group that ignores a click made from script. */
 function clickGroupOption(page: Page, selector: string, value: string): Promise<string | null> {
-  return inFront(page, async () => {
+  return inTurn(async () => {
     const p = await page.awj<Point>("groupOptionPoint", selector, value);
     if (!p.ok) return "the page did not keep the value";
     await page.click(p.x, p.y);

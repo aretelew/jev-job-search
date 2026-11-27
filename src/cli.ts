@@ -14,6 +14,7 @@ import { loadReport, type Fill, type FillReport } from "./browser/report.js";
 import { closeJobTab, loadSession, pageFor } from "./browser/session.js";
 import { clearBrowsingData, closeTab, ensureBrowser, listTargets, newTab, Page, sleep } from "./browser/cdp.js";
 import { acquireRun, currentRun } from "./util/store.js";
+import { beginLive, endLive, liveActivity, liveDone, liveGoal, liveJobs, liveNote, liveStep } from "./run/live.js";
 import { waitingWords } from "./run/assist.js";
 import { withStore } from "./util/store.js";
 import { checkJob } from "./browser/submit.js";
@@ -103,14 +104,27 @@ program
 
 type ApplyOptions = { count: number; dry?: boolean; submit?: boolean; fresh?: boolean; json?: boolean; tailor?: boolean; cover?: boolean; plain?: boolean; resubmit?: boolean };
 
+/** What became of a form the person was finishing, in the words the console and the live panel both use. */
+const RESUMED: Record<Awaited<ReturnType<typeof resume>>, string> = {
+  applied: "Sent and recorded.",
+  signed_in: "Signed in. Its form is filled next.",
+  retry: "The sign-in is tried again next, to see what you did.",
+  gone: "Its tab was closed. It is on your by-hand list.",
+  still_waiting: "Not done yet. It stays open; run resume again when you are ready.",
+};
+
 /** Takes the browser for a command that drives it, tidies what an interrupted run left, and gives the lock back when the work ends. */
 async function inRun<T>(command: string, work: () => Promise<T>): Promise<T> {
   const release = acquireRun(command);
+  // What the run does as it goes, for the dashboard's live panel. Begun only once this process holds the browser.
+  beginLive(command);
   try {
+    liveActivity("Opening the tool's Chrome window");
     await ensureBrowser();
     await sweep();
     return await work();
   } finally {
+    endLive();
     release();
   }
 }
@@ -209,7 +223,10 @@ program
       process.exitCode = 1;
       return;
     }
-    const say = (l: string) => console.error(l);
+    const say = (l: string) => {
+      console.error(l);
+      liveNote(l.trim());
+    };
     const jev = new JevClient();
     const dry = !!o.dry;
     documentsFromOptions({ tailor: policy.documents.tailor, cover: policy.documents.cover });
@@ -228,9 +245,13 @@ program
       clearStop();
       if (o.discover) {
         say(`[daily] ${localDay(new Date())}: looking for jobs`);
+        liveActivity("Looking for new jobs before applying");
         await discover(loadProfile(), jev, { boards: true, log: say }).catch((err: unknown) => say(`[daily] the search failed, so the queue is used as it is: ${err instanceof Error ? err.message : String(err)}`));
       }
-      return dailyRun(policy, { ...(o.target !== undefined ? { target: o.target } : {}), ...(o.maxAttempts !== undefined ? { maxAttempts: o.maxAttempts } : {}), ...(o.maxMinutes !== undefined ? { maxMinutes: o.maxMinutes } : {}), dry }, { now: () => new Date(), sleep: (ms) => new Promise((r) => setTimeout(r, ms)), random: Math.random, queue: () => loadQueue().entries, run, gate: () => accountGate(), jevSpentToday, log: say, stop: stopRequested });
+      return dailyRun(policy, { ...(o.target !== undefined ? { target: o.target } : {}), ...(o.maxAttempts !== undefined ? { maxAttempts: o.maxAttempts } : {}), ...(o.maxMinutes !== undefined ? { maxMinutes: o.maxMinutes } : {}), dry }, { now: () => new Date(), sleep: (ms) => {
+          liveActivity("Waiting before the next application: boards are given minutes between two", new Date(Date.now() + ms));
+          return new Promise((r) => setTimeout(r, ms));
+        }, progress: liveGoal, random: Math.random, queue: () => loadQueue().entries, run, gate: () => accountGate(), jevSpentToday, log: say, stop: stopRequested });
     });
     clearStop();
     if (!dry) {
@@ -368,6 +389,7 @@ program
     const sent: string[] = [];
     await inRun("submit", async () => {
       const unknown = new Set(loadQueue().entries.filter((e) => e.status === "submission_unknown").map((e) => e.job.id));
+      liveJobs(loadQueue().entries.filter((e) => ids.includes(e.job.id)));
       for (const id of ids) {
         if (unknown.has(id)) console.log(`${id}  not sent: Submit was clicked on this form before and no confirmation was seen. Settle it first: npx jev reconcile ${id}`);
         else if (await submitAndRecord(jev, id, !!o.force, !!o.keepOpen)) sent.push(id);
@@ -389,14 +411,22 @@ program
       if (!waiting.length) return console.log("No form is waiting for you.");
       let skip = false;
       if (process.stdin.isTTY) process.stdin.on("data", () => (skip = true));
+      liveJobs(waiting);
       for (const [i, e] of waiting.entries()) {
         console.log(`\n${i + 1} of ${waiting.length}: ${e.job.company} | ${e.job.title}`);
+        liveStep(e.job.id, "watching", `Watching while you finish it: ${waitingWords(e.waitingFor ?? "unknown")}`);
         console.log(`  In the tool's Chrome window: ${waitingWords(e.waitingFor ?? "unknown")}.${process.stdin.isTTY ? " Press Enter here to skip this one." : ""}`);
         skip = false;
         const outcome = await resume(jev, e.job.id, { stop: () => skip });
+        const said = RESUMED[outcome];
+        console.log(`  ${said}`);
+        // Sent and gone are recorded, and the live panel takes them from the record. The rest are told here.
         if (outcome === "applied") sent.push(e.job.id);
-        if (outcome === "signed_in" || outcome === "retry") signedIn.push(e.job.id);
-        console.log(outcome === "applied" ? "  Sent and recorded." : outcome === "signed_in" ? "  Signed in. Its form is filled next." : outcome === "retry" ? "  The sign-in is tried again next, to see what you did." : outcome === "gone" ? "  Its tab was closed. It is on your by-hand list." : "  Not done yet. It stays open; run resume again when you are ready.");
+        if (outcome === "signed_in" || outcome === "retry") {
+          signedIn.push(e.job.id);
+          liveStep(e.job.id, "waiting", said);
+        }
+        if (outcome === "still_waiting") liveDone(e.job.id, "waiting", said);
       }
       if (process.stdin.isTTY) process.stdin.pause();
       if (signedIn.length) {
@@ -417,9 +447,12 @@ program
     await inRun("reconcile", async () => {
       const unknown = loadQueue().entries.filter((e) => e.status === "submission_unknown" && (!ids.length || ids.includes(e.job.id)));
       if (!unknown.length) return console.log("No submission is waiting to be confirmed.");
+      liveJobs(unknown);
       for (const e of unknown) {
+        liveStep(e.job.id, "checking", "Reading what its tab shows now");
         const outcome = await reconcile(jev, e.job.id).catch(() => "unknown" as const);
         if (outcome === "applied") sent.push(e.job.id);
+        if (outcome === "unknown") liveDone(e.job.id, "unconfirmed", "Cannot tell from its tab whether it was sent");
         console.log(`${e.job.id}  ${e.job.company} | ${e.job.title}: ${outcome === "applied" ? "confirmed, recorded as applied" : outcome === "not_sent" ? "the form is still open, so it was not sent. It is on your by-hand list" : `cannot tell. Look for a confirmation email from ${e.job.company}, then run: npx jev mark ${e.job.id} --status applied, or --status queued to try again`}`);
       }
     });

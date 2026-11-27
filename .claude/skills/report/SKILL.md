@@ -19,7 +19,13 @@ press Ctrl-C. The page has four screens:
 
 - **Overview.** One line (sent today, waiting, ready to apply to), four
   numbers (sent, replies, needs you, ready to apply), applications over
-  the last 14 days, and the most recent ones.
+  the last 14 days, and the most recent ones. While an `/apply`, daily,
+  `/resume` or reconcile run works, a live panel on top shows it as it
+  goes: a progress bar over the run's jobs (and the day's target for a
+  daily run), the form being worked on and its stage (open, fill, answer,
+  send), every job's ending, and the latest steps. A daily run can be asked
+  to stop after its current application from there. After a run ends, the
+  panel folds into what that run did, for 12 hours.
 - **Needs you.** Everything only they can do, each with its button:
   - a question a form asked that their profile could not answer. They
     type or pick the answer and press "Save for next run". Nothing is

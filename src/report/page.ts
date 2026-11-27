@@ -23,7 +23,7 @@ function shell(): string {
 
 /** The page. With a snapshot it is a file to keep, read-only. Without one it is live, and `token` is what lets it send a change back. */
 export function reportPage(snapshot: Report | null, token = ""): string {
-  const boot = { token, statuses: REPORT.statuses, left: LEFT_FOR_YOU, snapshot };
+  const boot = { token, statuses: REPORT.statuses, left: LEFT_FOR_YOU, snapshot, poll: { live: REPORT.livePollMs, idle: REPORT.idlePollMs } };
   // Inside a script element only "<" can end it early, so every one is escaped.
   const tag = `<script id="data" type="application/json">${JSON.stringify(boot).replace(/</g, "\\u003c")}</script>`;
   // A function, so a "$" in the data is never read as a replacement pattern.

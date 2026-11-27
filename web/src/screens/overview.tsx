@@ -6,7 +6,8 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { StatusBadge } from "@/components/status-badge";
 import { PageHeader } from "@/components/page";
-import { needCount, type Needs, type Report } from "@/lib/api";
+import { LiveRun } from "@/components/live-run";
+import { needCount, type LiveView, type Needs, type Report } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Screen } from "@/App";
 
@@ -34,7 +35,7 @@ function Stat({ label, value, hint, tone, onClick }: { label: string; value: num
   );
 }
 
-export function Overview({ report, needs, live, go }: { report: Report; needs: Needs | undefined; live: boolean; go: (s: Screen) => void }) {
+export function Overview({ report, needs, live, run, go }: { report: Report; needs: Needs | undefined; live: boolean; run: LiveView | null; go: (s: Screen) => void }) {
   const t = report.totals;
   const waiting = needs ? needCount(needs) : t.leftForYou;
   const replies = t.replies;
@@ -52,6 +53,8 @@ export function Overview({ report, needs, live, go }: { report: Report; needs: N
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Overview" description={line} />
+
+      {live ? <LiveRun view={run} /> : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Applications sent" value={t.applied} hint={t.appliedToday ? `+${t.appliedToday} today` : undefined} onClick={() => go("applications")} />

@@ -17,6 +17,7 @@ import type { Needs } from "../src/report/needs.js";
 import { reportPage } from "../src/report/page.js";
 import { Level, Policy, Where } from "../src/run/policy.js";
 import type { automation as automationOf } from "../src/report/server.js";
+import type { LiveView } from "../src/run/live.js";
 
 const TOKEN = "made-up-token-for-the-test";
 const needs: Needs = {
@@ -38,6 +39,31 @@ const needs: Needs = {
   mail: [{ id: "m1", from: "Hooli Careers", subject: "An update on your application", on: "2026-10-03", kind: null, why: "the tool could not tell what it says", jobs: [{ id: "h1", company: "Hooli", title: "SWE Intern" }] }],
 };
 const automation: ReturnType<typeof automationOf> = { running: true, stopAsked: false, policy: null, policyError: "", defaults: Policy.parse({}), choices: { where: Where.options, levels: Level.options, boards: ["ashby", "greenhouse"] }, limits: { maxTarget: DAILY.maxTarget, perBoard: DAILY.perBoard, perEmployerPerDay: DAILY.perEmployerPerDay, gapMinutes: [3, 6], maxMinutes: DAILY.maxMinutes }, schedule: { on: false, at: "09:00", next: null }, timezone: "America/Vancouver", today: [] };
+
+const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+const liveJob = { board: "greenhouse", page: 1, startedAt: null, endedAt: null, outcome: null };
+const live: LiveView = {
+  state: "running",
+  live: {
+    pid: 4242,
+    command: "apply --submit",
+    startedAt: at(6),
+    updatedAt: at(0),
+    endedAt: null,
+    activity: "Globex: Page 2: filling 6 fields",
+    until: null,
+    goal: null,
+    jobs: [
+      { ...liveJob, id: "j1", company: "Acme", title: "Backend Intern", step: "done", outcome: "applied", detail: "Sent. The page confirmed it", startedAt: at(6), endedAt: at(3) },
+      { ...liveJob, id: "j2", company: "Globex", title: "Software Intern", step: "filling", page: 2, detail: "Page 2: filling 6 fields", startedAt: at(2) },
+      { ...liveJob, id: "j3", company: "Initech", title: "New Grad Engineer", step: "waiting", detail: "Up next" },
+    ],
+    events: [
+      { at: at(3), text: "Sent. The page confirmed it", tone: "good", job: "j1" },
+      { at: at(1), text: "Page 2: filling 6 fields", tone: "info", job: "j2" },
+    ],
+  },
+};
 
 describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real browser", () => {
   let chrome: ChildProcess;
@@ -63,6 +89,7 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
       if (req.url === "/api/data") return send(JSON.stringify(buildReport([], [])));
       if (req.url === "/api/needs") return send(JSON.stringify(needs));
       if (req.url === "/api/automation") return send(JSON.stringify(automation));
+      if (req.url === "/api/live") return send(JSON.stringify(live));
       res.writeHead(404).end();
     });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -101,6 +128,17 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
     const nav = await page.evaluate<string[]>("[...document.querySelectorAll('#nav [data-screen]')].map((b) => b.textContent)");
     expect(nav).toEqual(["Overview", "Needs you", "Applications", "Daily run"]);
     expect(await page.evaluate<string>("document.querySelector('#nav').innerText")).toMatch(/Needs you\s*4/);
+    // A run that is working shows on the overview: what it is on, how far it has come, and its latest steps.
+    for (let i = 0; i < 30 && !(await page.evaluate<boolean>("!!document.querySelector('#live-run')")); i++) await sleep(100);
+    const panel = await page.evaluate<string>("document.querySelector('#live-run').innerText");
+    expect(panel).toMatch(/Applying now/);
+    expect(panel).toMatch(/1\s*of 3 done/);
+    expect(panel).toMatch(/Globex/);
+    expect(panel).toMatch(/page 2/);
+    expect(panel).toMatch(/Page 2: filling 6 fields/);
+    expect(panel).toMatch(/1 sent/);
+    expect(panel).toMatch(/1 up next/);
+    expect(panel).not.toMatch(/Stop after this one/);
     // React reads a value only from the element's own setter followed by the event it listens for.
     const setValue = (selector: string, value: string, event = "input") =>
       page.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); const proto = Object.getPrototypeOf(el); Object.getOwnPropertyDescriptor(proto, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event(${JSON.stringify(event)}, { bubbles: true })); })()`);

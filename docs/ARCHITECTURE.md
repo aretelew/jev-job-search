@@ -69,7 +69,7 @@ Timing on 2026-10-02: 4,748 unique postings, 478 rated, 61 seconds, $0.075.
 | `src/forms/*.js` | The three scripts that run inside the page |
 | `src/forms/mapForm.ts` | Asking JEV what goes in each field |
 | `src/forms/locations.ts` | Questions about which of the employer's offices: JEV places each option, code chooses |
-| `src/answers/` | The writer (headless Claude Code by default; the Claude API, the Codex CLI or an OpenAI-compatible service when `.env` says so), the answer memory, drafts and voice |
+| `src/answers/` | The writer (headless Claude Code by default; the Claude API, the Codex CLI or an OpenAI-compatible service when `.env` says so), the answer memory, drafts and voice. `research.ts` looks up a few technical facts about a company on the web, told only the company and the posting, so an answer about the company can say something specific; the writer gets them as `company_notes` |
 | `src/documents/` | Tailored resumes and cover letters: the writer's draft, the truth gate (`unsupportedClaims`), HTML rendered to PDF through Chrome (`printPdf`) |
 | `src/accounts/` | Boards that want an account: what the person allowed (`config.ts`), the Keychain (`secrets.ts`), the sign-in itself (`auth.ts`), one adapter per board (`workday.ts`), whether a job may be taken (`capability.ts`) |
 | `src/mail/` | Gmail, read-only (`gmail.ts`), and finding the one verification email an account asked for (`verification.ts`) |
@@ -490,6 +490,7 @@ part of correctness.
 | `data/memory.json` | `MemoryFile` v1: resolutions by form page, and reusable answers by question | `resolve`, `apply` | `resolve`, `apply`, `memory` |
 | `data/cache/ratings.json`, `data/cache/plans.json` | JEV's answers by question hash | discover, `mapForm` | the same |
 | `data/cache/http/` | cached GET bodies keyed by URL hash | `getText` | `getText` |
+| `data/cache/companies/` | one file per company: technical facts with their sources, and when they were found | the research step | the writer |
 | `data/runs/jev-usage.jsonl` | one JSON object per JEV call: label, tokens, cost | `JevClient` | `cost` |
 | `data/runs/writer-usage.jsonl` | one JSON object per Claude call: purpose, job, tokens, cost | the writer | `cost` |
 | `data/runs/<id>.plan.json`, `<id>.report.json` | the dump and plan of the current page, and the verified result | the apply loop | `resolve`, `inspect`, `submit`, `survey` |

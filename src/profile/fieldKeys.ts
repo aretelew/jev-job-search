@@ -4,7 +4,7 @@
  * the box. Keys are the choice criteria, so each description must be a clear
  * definition the model can match a label against.
  */
-import { monthName, sponsorshipLater, type Profile } from "./schema.js";
+import { basedIn, monthName, sponsorshipLater, type Profile } from "./schema.js";
 
 export const SPECIAL_KEYS = {
   resume_upload: "A file input for the resume or CV",
@@ -119,7 +119,10 @@ export function valueFor(profile: Profile, key: ProfileKey): string | null {
     case "country": return profile.address.country;
     case "full_address":
       return `${profile.address.line1}, ${profile.address.city}, ${profile.address.regionCode} ${profile.address.postalCode}, ${profile.address.country}`;
-    case "current_location": return `${profile.address.city}, ${profile.address.region}, ${profile.address.country}`;
+    case "current_location": {
+      const at = basedIn(profile);
+      return `${at.city}, ${at.region}, ${at.country}`;
+    }
     case "linkedin_url": return profile.links.linkedin;
     case "github_url": return profile.links.github;
     case "website_url": return profile.links.website ?? profile.links.portfolio ?? profile.links.github;

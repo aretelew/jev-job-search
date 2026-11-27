@@ -23,8 +23,12 @@ import type { DumpedField, FieldsDump, FillPlan, PlannedField } from "./fields.j
 import { documentPolicy, documentsFor, tailorJob } from "../documents/tailor.js";
 import { loadQueue } from "../jobs/queue.js";
 import { planLocations } from "./locations.js";
+import { salaryRule } from "../profile/pay.js";
 
 const NONE = "__none__";
+
+/** What every planned field carries from the box it plans for. */
+const planBase = (f: DumpedField) => ({ id: f.id, selector: f.selector, kind: f.kind, label: f.label, required: f.required, optionLabel: null as string | null });
 
 export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fields: DumpedField[]): Record<string, unknown> {
   const later = sponsorshipLater(profile);
@@ -70,7 +74,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
           ? `The candidate may work without sponsorship only in: ${profile.workAuthorization.authorizedCountries.join(", ")}. They are also authorized to work now in: ${later.join(", ")}, but will need visa sponsorship there in the future. Never claim work authorization anywhere else.`
           : `The candidate may work without sponsorship only in: ${profile.workAuthorization.authorizedCountries.join(", ")}. Never claim work authorization anywhere else.`,
         "Never write a cover letter.",
-        "Salary expectation is left blank or set to negotiable.",
+        salaryRule(profile),
         "Marketing opt-ins are optional and left unchecked. Consent and acknowledgement boxes required to apply are checked.",
         "A Start Date or End Date that follows School, Degree or Field of Study fields is the degree's start or end, never the job start. The job start is only asked by fields that say available, start work, or join.",
       ],
@@ -93,7 +97,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 25;
+const PLAN_VERSION = 30;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -102,7 +106,8 @@ const AUTH_Q = /authori[sz]ed to work|legally (?:authori[sz]ed|eligible|entitled
 const NEEDS_PERMIT_Q = /\b(?:require|need)s?\b[^.?]{0,25}\b(?:(?:work|employment) (?:authori[sz]ation|visa|permit)|authori[sz]ation to work)/i;
 const SPONSOR_Q = new RegExp(`sponsor|${NEEDS_PERMIT_Q.source}`, "i");
 /** A tick that accepts something: terms, an agreement, a notice. */
-const AGREEMENT_Q = /\b(agree|agreement|acknowledg|consent|terms|privacy|arbitration|attest|certify|accept)/i;
+/** Words that accept or agree to something. "Acceptance" is not one: "after offer acceptance" is a date, not an agreement. */
+const AGREEMENT_Q = /\b(agree|agreement|acknowledg|consent|terms|privacy|arbitration|attest|certify|accept(?!ance))/i;
 /**
  * The part of a date a box labelled Month, Day or Year takes, as a plain number. Null when the box
  * is not one of those, or the value is not a date. A date that names only a month is its first day.
@@ -206,11 +211,15 @@ const AGREEMENT_KINDS: Record<AgreementKind, RegExp> = {
   workplace: WORKPLACE_Q,
   /** That the application's terms and conditions, or terms of use, were read and accepted (Workday's last page). */
   terms: /\bterms (?:and|&) (?:conditions|agreements)\b|\bterms of (?:use|service)\b/i,
+  /** One that gives up a right or agrees to a check: arbitration, a waiver, a non-compete, a background check. */
+  binding: BINDING,
 };
 
-/** True when the label is a kind of acknowledgment the person approved for every posting, and binds them to nothing more. */
-const acceptedKind = (label: string, profile: Profile) =>
-  !BINDING.test(label) && (profile.preferences.acceptedAgreements ?? []).some((k) => AGREEMENT_KINDS[k].test(label));
+/** True when the label is a kind of acknowledgment the person approved for every posting. One that gives something up needs "binding" too. */
+const acceptedKind = (label: string, profile: Profile) => {
+  const kinds = profile.preferences.acceptedAgreements ?? [];
+  return (!BINDING.test(label) || kinds.includes("binding")) && kinds.some((k) => AGREEMENT_KINDS[k].test(label));
+};
 
 /** A value as an approval names it: a ticked box is "checked" however a caller spells it. */
 const approvalValue = (f: Gated, value: string) => {
@@ -257,6 +266,12 @@ const isGenericSource = (s: string, job: Job) => {
 };
 /** The sources the person named in their standing answers, in order. A short answer is a name ("LinkedIn"); a longer one is a rule for the writer. */
 const namedSources = (profile: Profile) => saidAbout(profile, (q) => SOURCE_Q.test(q)).filter((a) => a.trim().split(/\s+/).length <= FORM.maxSourceWords);
+/** True when a list's wording names this source: the same words, or the same words and more ("Linkedin Jobs" for "LinkedIn"). */
+const namesSource = (listed: string, source: string) => {
+  const l = sourceWords(listed);
+  const s = sourceWords(source);
+  return !!s && (l === s || l.startsWith(`${s} `));
+};
 
 /**
  * "How did you hear about us" as a list, answered in code. First a source the person gave as a path
@@ -269,14 +284,14 @@ const namedSources = (profile: Profile) => saidAbout(profile, (q) => SOURCE_Q.te
 export function sourcePlan(f: DumpedField, profile: Profile, job: Job): PlannedField | null {
   if (f.kind !== "combobox" || !SOURCE_Q.test(f.label) || !hasChoosableOptions(f)) return null;
   const labels = f.options.map((o) => o.label.trim()).filter((l) => l && !/^select\b/i.test(l));
-  const offered = (s: string) => labels.some((l) => sourceWords(l) === sourceWords(s));
+  const listed = (s: string) => labels.find((l) => namesSource(l, s));
   const named = namedSources(profile);
-  const forThisList = named.find((n) => CHOICE_PATH.test(n) && offered(n.split(CHOICE_PATH)[0] ?? ""));
+  const forThisList = named.find((n) => CHOICE_PATH.test(n) && listed(n.split(CHOICE_PATH)[0] ?? ""));
   const generic = labels.find((l) => isGenericSource(l, job));
   const genericChoice = generic && (/^other\b/i.test(generic) ? generic : `${generic} > Other`);
-  const value = forThisList ?? genericChoice ?? named.find(offered) ?? named[0];
+  const value = forThisList ?? genericChoice ?? named.map(listed).find(Boolean) ?? named[0];
   if (!value) return null;
-  const base = { id: f.id, selector: f.selector, kind: f.kind, label: f.label, required: f.required, optionLabel: null as string | null };
+  const base = planBase(f);
   return { ...base, action: "fill", key: "how_did_you_hear", value, confidence: 1, note: value === genericChoice ? "a source that names nobody" : "the source the person named" };
 }
 
@@ -288,11 +303,12 @@ export function sourcePlan(f: DumpedField, profile: Profile, job: Job): PlannedF
 export function sourceHold(f: Gated, value: string, profile: Profile, job: Job): string | null {
   if (!SOURCE_Q.test(f.label)) return null;
   const theirs = [profile.preferences.howDidYouHear, ...saidAbout(profile, (q) => SOURCE_Q.test(q))];
-  const own = new Set(theirs.flatMap((s) => s.split(CHOICE_PATH)).map(sourceWords).filter(Boolean));
-  const steps = value.split(CHOICE_PATH).map(sourceWords).filter(Boolean);
-  // The person's own source, under whatever heading the list files it ("Social Media > LinkedIn").
-  if (own.has(steps[steps.length - 1] ?? "")) return null;
-  const named = steps.filter((s) => !own.has(s) && !isGenericSource(s, job));
+  const own = theirs.flatMap((s) => s.split(CHOICE_PATH)).filter((s) => sourceWords(s));
+  const isTheirs = (step: string) => own.some((o) => namesSource(step, o));
+  const steps = value.split(CHOICE_PATH).filter((s) => sourceWords(s));
+  // The person's own source, under whatever heading the list files it ("Social Media > LinkedIn", "Job Board > Linkedin Jobs").
+  if (isTheirs(steps[steps.length - 1] ?? "")) return null;
+  const named = steps.filter((s) => !isTheirs(s) && !isGenericSource(s, job));
   return named.length ? `"${value.slice(0, 40)}" names a source the profile does not give. Only an online posting, the employer's site or other is known; set preferences.howDidYouHear if it was somewhere else` : null;
 }
 
@@ -440,6 +456,39 @@ export function sectionOf(previous: DumpedField[]): "education" | "employment" |
   return null;
 }
 
+/** A box of a Workday work-history block, named by its id: "#workExperience-9--location", "#workExperience-9--startDate-dateSectionMonth-input". */
+const WORKDAY_WORK = /workExperience-(\d+)--([a-zA-Z]+)(?:-dateSection(Month|Year))?/;
+
+/**
+ * A Workday work-history block, answered in code from the profile's most recent job by the part each
+ * box's id names: title, company, the job's own location, whether the person works there now, and the
+ * From and To dates. Its labels ("Location", "Month") cannot tell a job's location from the person's
+ * home, or a job's dates from a degree's. Only the first block is the most recent job; another is JEV's.
+ */
+export function workdayWorkPlan(f: DumpedField, fields: DumpedField[], profile: Profile): PlannedField | null {
+  const m = WORKDAY_WORK.exec(f.selector);
+  const exp = mostRecentJob(profile);
+  if (!m || !exp) return null;
+  const blocks = [...new Set(fields.map((x) => WORKDAY_WORK.exec(x.selector)?.[1]).filter(Boolean))];
+  if (blocks[0] !== m[1]) return null;
+  const [, , part, datePart] = m;
+  const base = planBase(f);
+  const fill = (key: string, value: string, note: string): PlannedField => ({ ...base, action: "fill", key, value, confidence: 1, note });
+  if (part === "jobTitle") return fill("most_recent_title", exp.title, "the most recent job, from the profile");
+  if (part === "companyName") return fill("most_recent_company", exp.company, "the most recent job, from the profile");
+  if (part === "location") return exp.location ? fill("employment_location", exp.location, "where the job was, from the profile") : null;
+  // A box the page ticked on its own is unticked: the job has ended.
+  if (part === "currentlyWorkHere") return exp.current ? fill("checked", "true", "the most recent job is the current one") : fill("unchecked", "false", "the most recent job has ended");
+  if (part !== "startDate" && part !== "endDate") return null;
+  const isStart = part === "startDate";
+  const date = /^(\d{4})-(\d{2})/.exec(isStart ? exp.start : exp.end);
+  if (!date) return !isStart && exp.current ? { ...base, action: "skip", key: "leave_blank", value: null, confidence: 1, note: "still in this job, no end date" } : null;
+  const key = isStart ? "employment_start_date" : "employment_end_date";
+  if (datePart === "Year") return fill(key, date[1] as string, "work history date from the profile");
+  if (datePart === "Month") return fill(key, String(parseInt(date[2] as string, 10)), "work history date from the profile");
+  return null;
+}
+
 /**
  * Dates and the "current role" box of a work-history block are facts about the most recent job
  * in the profile, so they are resolved in code. Returns null when the field is not one of these.
@@ -448,7 +497,7 @@ export function employmentDatePlan(f: DumpedField, previous: DumpedField[], prof
   const exp = mostRecentJob(profile);
   if (!exp || sectionOf(previous) !== "employment") return null;
   const label = f.label.trim();
-  const base = { id: f.id, selector: f.selector, kind: f.kind, label: f.label, required: f.required, optionLabel: null as string | null };
+  const base = planBase(f);
   if (f.kind === "checkbox" && CURRENT_ROLE.test(label)) {
     return exp.current
       ? { ...base, action: "fill", key: "checked", value: "true", confidence: 1, note: "the most recent job is the current one" }
@@ -487,6 +536,25 @@ export function isSlotChoice(f: DumpedField): boolean {
 
 /** Typing a name to sign an agreement is the candidate's act, not the tool's. An NDA is theirs to read first, whatever the box looks like. */
 const SIGNATURE_LABEL = /\bNDA\b|non-?disclosure|e-?signature|electronic signature|(typ(e|ing)|enter(ing)?) your (full |legal )*name/i;
+/** A box that takes a typed name. */
+const TYPED_KIND = /^(text|textarea)$/;
+/** The date a form is signed on (Workday's self-identification forms: "dateSignedOn"), told by the box's id, label or section. */
+const SIGNED_ON = /date ?signed|signed ?on|signature ?date|date of signature/i;
+
+/**
+ * The date a form is signed, when the person lets the tool sign: today, in the part the box asks for
+ * (a Month, Day or Year box) or whole in a date box. Null for any other box, or when they do not.
+ */
+export function signedOnPlan(f: DumpedField, profile: Profile, today: Date): PlannedField | null {
+  if (!profile.preferences.signForMe || !SIGNED_ON.test(`${f.selector} ${f.name} ${f.label} ${f.section ?? ""}`)) return null;
+  const parts = { month: String(today.getMonth() + 1), day: String(today.getDate()), year: String(today.getFullYear()) };
+  const part = /^\s*(month|day|year)\b/i.exec(f.label)?.[1]?.toLowerCase() as keyof typeof parts | undefined;
+  const iso = `${parts.year}-${parts.month.padStart(2, "0")}-${parts.day.padStart(2, "0")}`;
+  const value = part ? parts[part] : f.kind === "date" || f.kind === "calendar" || f.kind === "text" ? iso : null;
+  if (!value) return null;
+  const base = planBase(f);
+  return { ...base, action: "fill", key: "signature_date", value, confidence: 1, note: "the date signed is today, as the person allowed" };
+}
 
 /**
  * Other wordings a list may know a planned value by, tried in order when it has no such choice. The
@@ -497,9 +565,12 @@ const SIGNATURE_LABEL = /\bNDA\b|non-?disclosure|e-?signature|electronic signatu
  */
 export function alternatesFor(p: Pick<PlannedField, "key" | "kind"> & { value?: string | null }, profile: Profile): { alternates?: string[] } {
   if (p.kind !== "combobox") return {};
+  // A planned choice under a heading ("Job Board > Other") is tried with the person's sources under the same heading first ("Job Board > LinkedIn").
+  const heading = p.value && CHOICE_PATH.test(p.value) ? p.value.split(CHOICE_PATH)[0] : null;
+  const named = namedSources(profile);
   const also = (
     p.key === "major" ? (profile.education[0]?.fieldAlso ?? []) :
-    p.key === "how_did_you_hear" ? ["Other", ...namedSources(profile)] :
+    p.key === "how_did_you_hear" ? [...(heading ? named.filter((n) => !CHOICE_PATH.test(n)).map((n) => `${heading} > ${n}`) : []), "Other", ...named] :
     []
   ).filter((a, i, all) => a !== p.value && all.indexOf(a) === i);
   return also.length ? { alternates: also } : {};
@@ -522,7 +593,9 @@ export async function mapForm(jev: JevClient, profile: Profile, job: Job, dump: 
   const agreements = { review: !!profile.preferences.reviewAgreements, kinds: profile.preferences.acceptedAgreements ?? [], approved: (profile.preferences.approvedAgreements ?? []).filter((a) => a.jobId === job.id) };
   // Which offices are chosen goes by whether the person will relocate and the order they named.
   const places = { relocate: profile.preferences.willingToRelocate, offices: profile.preferences.preferredOffices };
-  const key = hashOf({ fields, submit: dump.submitSelectors, state: buildFormState(profile, job, { ...dump, url: "" }, []), agreements, places, form: FORM, documents: documentPolicy(), version: PLAN_VERSION });
+  // A plan that signs for the person dates the signature today, so it is not reused tomorrow.
+  const signedOn = profile.preferences.signForMe ? new Date().toDateString() : null;
+  const key = hashOf({ fields, submit: dump.submitSelectors, state: buildFormState(profile, job, { ...dump, url: "" }, []), agreements, places, signedOn, form: FORM, documents: documentPolicy(), version: PLAN_VERSION });
   const hit = plans.get(key);
   if (hit) return { ...hit, jobId: job.id, url: dump.url, jevCostUsd: 0 };
   const plan = await mapFormFresh(jev, profile, job, dump);
@@ -535,9 +608,16 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
   const planned: PlannedField[] = [];
   const startCost = jev.usage.costUsd;
   const resolvedInCode = new Set<string>();
+  const today = new Date();
   dump.fields.forEach((f, i) => {
     const above = dump.fields.slice(Math.max(0, i - 8), i);
-    const p = sourcePlan(f, profile, job) ?? employmentDatePlan(f, above, profile) ?? (sectionOf(above) === "employment" ? null : educationDatePlan(f, dump.fields.slice(Math.max(0, i - 4), i), profile));
+    // Boxes answered in code, the first planner that knows the box wins. A date under an employment heading is never a degree's.
+    const p =
+      sourcePlan(f, profile, job) ??
+      signedOnPlan(f, profile, today) ??
+      workdayWorkPlan(f, dump.fields, profile) ??
+      employmentDatePlan(f, above, profile) ??
+      (sectionOf(above) === "employment" ? null : educationDatePlan(f, dump.fields.slice(Math.max(0, i - 4), i), profile));
     if (p) {
       planned.push(p);
       resolvedInCode.add(f.id);
@@ -633,7 +713,7 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
 }
 
 export function planField(f: DumpedField, answer: Answer | undefined, profile: Profile, job: Job): PlannedField {
-  const base = { id: f.id, selector: f.selector, kind: f.kind, label: f.label, required: f.required, optionLabel: null as string | null };
+  const base = planBase(f);
   // A reference's email or a supervisor's phone is not the applicant's: such a box is never filled from the profile.
   if (categoryOf(f) === "contact_other") {
     return { ...base, action: f.required ? "review" : "skip", key: f.required ? "unknown" : "leave_blank", value: null, confidence: 1, note: "asks for another person's contact details" };
@@ -644,7 +724,11 @@ export function planField(f: DumpedField, answer: Answer | undefined, profile: P
     const intl = /\+\d|country code|international/i.test(`${f.placeholder} ${f.hint}`);
     return { ...base, action: "fill", key: intl ? "phone_with_country_code" : "phone", value: intl ? `${profile.phone.countryCode}${profile.phone.national}` : profile.phone.national, confidence: 1, note: null };
   }
-  if (SIGNATURE_LABEL.test(f.label)) return { ...base, action: "review", key: "signature", value: null, confidence: 1, note: "signing an agreement is for the candidate to do" };
+  if (SIGNATURE_LABEL.test(f.label)) {
+    // The person may let the tool type their name to sign. A box that is ticked to agree goes through the agreement gate instead.
+    if (profile.preferences.signForMe && TYPED_KIND.test(f.kind)) return { ...base, action: "fill", key: "signature", value: `${profile.name.first} ${profile.name.last}`, confidence: 1, note: "signed with the person's name, as they allowed" };
+    if (!profile.preferences.signForMe) return { ...base, action: "review", key: "signature", value: null, confidence: 1, note: "signing an agreement is for the candidate to do" };
+  }
   if (isSlotChoice(f)) return { ...base, action: "review", key: "schedule", value: null, confidence: 1, note: "choosing a date or a time slot is for the candidate to do" };
   if (!answer) return { ...base, action: "review", key: "unknown", value: null, confidence: 0, note: "no answer" };
 

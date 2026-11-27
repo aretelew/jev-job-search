@@ -7,7 +7,7 @@
 import { BROWSER } from "../config.js";
 import { sleep, type Page } from "./cdp.js";
 import { monthOfHeading, showsDate, toYmd } from "../util/dates.js";
-import { inFront, type Point } from "./session.js";
+import { inTurn, type Point } from "./session.js";
 
 type Calendar = { open: boolean; heading: string; prev: Point; next: Point; days: { day: number; x: number; y: number }[] };
 
@@ -18,7 +18,7 @@ type Calendar = { open: boolean; heading: string; prev: Point; next: Point; days
 export function pickDate(page: Page, selector: string, value: string): Promise<string | null> {
   const want = toYmd(value);
   if (!want) return Promise.resolve(`"${value}" is not a date the calendar can be set to`);
-  return inFront(page, async () => {
+  return inTurn(async () => {
     const read = () => page.awj<Calendar>("calendar", selector);
     let cal = await read();
     if (!cal.open) {

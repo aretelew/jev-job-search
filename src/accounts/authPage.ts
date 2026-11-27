@@ -5,7 +5,7 @@
  */
 import type { Page } from "../browser/cdp.js";
 import { sleep } from "../browser/cdp.js";
-import { goto, inFront, type Point } from "../browser/session.js";
+import { goto, inTurn, type Point } from "../browser/session.js";
 import type { Secret } from "../util/redact.js";
 import type { AuthPage, AuthSnapshot } from "./provider.js";
 
@@ -83,7 +83,7 @@ const originOf = (url: string): string => {
 export function cdpAuthPage(page: Page): AuthPage {
   const clickAt = async (p: Point): Promise<boolean> => {
     if (!p.ok) return false;
-    await inFront(page, () => page.click(p.x, p.y));
+    await inTurn(() => page.click(p.x, p.y));
     return true;
   };
   return {
@@ -92,7 +92,7 @@ export function cdpAuthPage(page: Page): AuthPage {
     click: async (selector) => clickAt(await page.call<Point>(POINT, selector)),
     clickByText: async (scope, pattern) => clickAt(await page.call<Point>(POINT_BY_TEXT, scope, pattern)),
     focus: (selector) =>
-      inFront(page, async () => {
+      inTurn(async () => {
         const p = await page.call<Point>(POINT, selector);
         if (p.ok) await page.click(p.x, p.y);
         const f = await page.call<{ ok: boolean; filled: boolean }>(FOCUS, selector);
@@ -100,8 +100,8 @@ export function cdpAuthPage(page: Page): AuthPage {
         if (f.ok && f.filled) await page.key("Backspace");
         return f.ok;
       }),
-    type: (text) => inFront(page, () => page.type(text)),
-    typeSecret: (secret: Secret) => inFront(page, () => page.type(secret.reveal())),
+    type: (text) => inTurn(() => page.type(text)),
+    typeSecret: (secret: Secret) => inTurn(() => page.type(secret.reveal())),
     holds: (selector) => page.call(HOLDS, selector),
     autofilled: (selector) => page.call<boolean>(AUTOFILLED, selector),
     navigate: (url) => goto(page, url),

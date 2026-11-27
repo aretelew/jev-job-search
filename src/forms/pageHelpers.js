@@ -271,6 +271,32 @@
       const charm = pill ? pill.querySelector('[data-automation-id="DELETE_charm"]') : null;
       return charm && visible(charm) ? center(charm) : { x: 0, y: 0, ok: false };
     },
+    /**
+     * Sections still closed behind their "Add" button (Workday's Education, Languages, Work Experience):
+     * the section's name and where its button is. A section that already holds a box is not closed.
+     */
+    closedSections() {
+      const headingBefore = (el) => {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          for (let s = n.previousElementSibling; s; s = s.previousElementSibling) {
+            const h = s.matches("h1, h2, h3, h4") ? s : s.querySelector("h1, h2, h3, h4");
+            if (h) return text(h);
+          }
+        }
+        return "";
+      };
+      const out = [];
+      for (const b of document.querySelectorAll("button")) {
+        if (!visible(b) || text(b).toLowerCase() !== "add") continue;
+        const group = b.closest('[role="group"], section, fieldset');
+        const by = group && group.getAttribute("aria-labelledby");
+        const named = by && document.getElementById(by);
+        const section = (named ? text(named) : "") || (group && group.querySelector("h2, h3, h4") ? text(group.querySelector("h2, h3, h4")) : "") || headingBefore(b);
+        if (!section || (group && group.querySelector("input, select, textarea"))) continue;
+        out.push({ section, ...center(b) });
+      }
+      return out;
+    },
     /** True for a box that only searches once Enter is pressed (Workday's search-and-pick box). */
     searchesOnEnter(sel) {
       const el = q(sel);

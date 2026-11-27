@@ -7,6 +7,9 @@
 import { SIGN_IN_REASON, type FillReport } from "../browser/report.js";
 import type { QueueEntry, WaitingFor } from "../jobs/queue.js";
 
+/** Why a job is submission_unknown when nothing more is known: the words the record and the live panel share. */
+export const UNKNOWN_REASON = "Submit was clicked and no confirmation was seen";
+
 export type Outcome = {
   /** send: the form is ready. Anything else is the status the job is recorded with. */
   action: "send" | QueueEntry["status"];

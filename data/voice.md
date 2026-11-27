@@ -23,8 +23,13 @@ from `applywithjev answer-context`; nothing is submitted that breaks them.
 - No em dashes or en dashes anywhere. Use a comma, a period, or "to".
 - No exclamation marks.
 - No bullet points inside a form answer unless the field asks for a list.
-- Only facts from the profile's `facts` list, `experience`, `projects`, and
-  the job posting. Nothing invented, nothing rounded up.
+- Only facts from the profile's `facts` list, `experience`, `projects`, the
+  job posting, and the company's own public pages. Nothing invented, nothing
+  rounded up.
+- Answer the question that was asked. A question about the company, its
+  product or the role is answered about them. A project comes in only when
+  the question asks about your work, or as one short detail that backs up the
+  point.
 - Never claim US work authorization. Never mention the GPA unless asked.
 - No "as an AI", no apologies, no hedging phrases like "I believe I would be a
   great fit".

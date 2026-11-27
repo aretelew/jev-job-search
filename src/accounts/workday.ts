@@ -118,7 +118,8 @@ export const workday: Adapter = {
   mail: {
     senders: ["myworkday.com", "workday.com", "myworkdayjobs.com"],
     subject: /verif|activat|confirm|account/i,
-    linkPath: /\/(activate|verify|verification|confirm)[a-z]*(\/|$)/i,
+    // A path segment that names the act in any wording ("/activate", "/emailVerification", "/accountActivation"), never an unsubscribe link.
+    linkPath: /^(?!.*unsubscri)(?:.*\/)?[a-z-]*(?:activat|verif|confirm)[a-z-]*(?:\/|$)/i,
     code: null,
   },
 };

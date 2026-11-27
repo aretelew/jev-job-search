@@ -416,7 +416,9 @@
     // Skip a container whose control was already read. An input nobody can see (Ashby keeps a hidden checkbox
     // behind its Yes and No buttons) does not count: the buttons are the control.
     if (!drawnRadios && [...c.querySelectorAll("input, select, textarea")].some((x) => x.type !== "hidden" && (dumped.has(x) || visible(x)))) return;
-    const buttons = [...c.querySelectorAll("button, [role=radio], [role=option]")].filter((b) => visible(b) && text(b).length > 0 && text(b).length <= 90 && !/upload|browse|remove|submit|apply|next|continue|back/i.test(text(b)));
+    // A dropdown drawn as a button (Workday's "Select One") was read as its own question: its container is not a button group.
+    if (!drawnRadios && [...c.querySelectorAll("button, [role=combobox], [role=listbox]")].some((x) => dumped.has(x))) return;
+    const buttons = [...c.querySelectorAll("button, [role=radio], [role=option]")].filter((b) => !dumped.has(b) && visible(b) && text(b).length > 0 && text(b).length <= 90 && !/upload|browse|remove|submit|apply|next|continue|back/i.test(text(b)));
     if (buttons.length < 2 || buttons.length > 12) return;
     if ([...seenGroup].some((prev) => prev.contains(c) || c.contains(prev))) return;
     seenGroup.add(c);

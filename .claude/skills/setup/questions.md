@@ -15,6 +15,7 @@ part F.
 | The email address employers should write to | `email` |
 | Your phone number and its country code | `phone.national` (digits only), `phone.countryCode` |
 | Your full mailing address: street, city, province or state, postal code, country | `address` |
+| Where you say you are based, if not the town on your address (a suburb given as the nearby city) | `location.city`, `location.region`, `location.regionCode` |
 | Your date of birth (optional; a few forms ask) | `dateOfBirth` |
 | Your LinkedIn, GitHub, and personal site or portfolio | `links` |
 

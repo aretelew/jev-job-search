@@ -2,20 +2,21 @@
  * What the page is given and what it can ask for. The shapes are the server's own types, imported
  * as types only, so the page and the server cannot drift apart and nothing from the server is bundled.
  */
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { Report, ReportRow } from "../../../src/report/data.js";
 import type { Needs, Question } from "../../../src/report/needs.js";
 import type { automation } from "../../../src/report/server.js";
+import type { Live, LiveJob, LiveView } from "../../../src/run/live.js";
 
-export type { Needs, Question, Report };
+export type { Live, LiveJob, LiveView, Needs, Question, Report };
 export type Row = ReportRow;
 export type Automation = ReturnType<typeof automation>;
 export type Policy = Automation["defaults"];
 
 /** What the server writes into the page: the token for changes, the statuses it offers, the statuses that wait on the person, and a snapshot's data. */
-type Boot = { token: string; statuses: string[]; left: string[]; snapshot: Report | null };
+type Boot = { token: string; statuses: string[]; left: string[]; snapshot: Report | null; poll?: { live: number; idle: number } };
 
 function readBoot(): Boot {
   try {
@@ -30,6 +31,7 @@ function readBoot(): Boot {
 const boot = readBoot();
 export const STATUSES = boot.statuses;
 export const LEFT_FOR_YOU = boot.left;
+const POLL = boot.poll ?? { live: 1500, idle: 6000 };
 
 /** One request's outcome: its value, or why it could not be had. */
 export type Loaded<T> = { value: T; error?: undefined } | { value?: undefined; error: string };
@@ -61,6 +63,41 @@ export async function post<T = { ok: boolean }>(path: string, body: unknown): Pr
   const parsed = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
   if (!res.ok || !parsed) throw new Error(parsed?.error || `not saved (${res.status})`);
   return parsed;
+}
+
+/**
+ * What the run working now is doing, asked for again and again: often while a run works, now and
+ * then while none does, so a run that starts is noticed. A saved snapshot asks nothing. A request
+ * that fails keeps what was last seen, so a slow moment never empties the panel.
+ */
+export function useLive(live: boolean): LiveView | null {
+  const [view, setView] = useState<LiveView | null>(null);
+  useEffect(() => {
+    if (!live) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      const got = await get<LiveView>("/api/live");
+      if (stopped) return;
+      if (got.value) setView(got.value);
+      const running = (got.value ?? null)?.state === "running";
+      // A tab in the background asks as seldom as when no run works.
+      timer = setTimeout(() => void tick(), running && !document.hidden ? POLL.live : POLL.idle);
+    };
+    const onShow = () => {
+      if (document.hidden) return;
+      clearTimeout(timer);
+      void tick();
+    };
+    void tick();
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [live]);
+  return view;
 }
 
 /** Reloads every record. Given by the page's root, so a screen never threads it through. */

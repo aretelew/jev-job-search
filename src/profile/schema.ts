@@ -11,8 +11,12 @@ import { PATHS } from "../config.js";
 const YesNo = z.enum(["yes", "no"]);
 /** A voluntary self-identification question may be declined. */
 const YesNoDecline = z.enum(["yes", "no", "decline"]);
-/** Kinds of acknowledgment a person may approve once for every posting: a privacy notice read, where the work is done, the application's terms and conditions. */
-export const AgreementKind = z.enum(["privacy", "workplace", "terms"]);
+/**
+ * Kinds of acknowledgment a person may approve once for every posting: a privacy notice read, where the
+ * work is done, the application's terms and conditions, and one that gives up a right (arbitration, a
+ * waiver, a non-compete, a background check). Without "binding", one that gives something up waits for them.
+ */
+export const AgreementKind = z.enum(["privacy", "workplace", "terms", "binding"]);
 export type AgreementKind = z.infer<typeof AgreementKind>;
 
 export const ProfileSchema = z.object({
@@ -39,6 +43,18 @@ export const ProfileSchema = z.object({
     country: z.string(),
     countryCode: z.string().length(2),
   }),
+  /**
+   * Where the person says they are based, when that is not the town on the mailing address (a suburb
+   * given as the nearby city). A Location field, the writer and the resume header use it; the address
+   * fields of a form keep the mailing address. Left out, the address city is the location.
+   */
+  location: z
+    .object({
+      city: z.string().min(1),
+      region: z.string().min(1),
+      regionCode: z.string().optional(),
+    })
+    .optional(),
   links: z.object({
     linkedin: z.string().url(),
     github: z.string().url(),
@@ -133,6 +149,8 @@ export const ProfileSchema = z.object({
     approvedAgreements: z.array(z.object({ jobId: z.string(), label: z.string(), value: z.string() })).optional(),
     /** Kinds of acknowledgment approved for every posting, even with reviewAgreements: a privacy notice, where the work is done, the application's terms and conditions. */
     acceptedAgreements: z.array(AgreementKind).optional(),
+    /** The person lets the tool sign for them: their full name where a form asks them to type it to sign, today's date as the date signed. Left out, a signature waits for them. */
+    signForMe: z.boolean().optional(),
     /** Mandatory search conditions; ambiguous matches stay out of the application queue. */
     searchRequirements: z.string().optional(),
     internshipYear: z.number().int().optional(),
@@ -186,6 +204,13 @@ export function loadProfile(file = PATHS.profile): Profile {
   const parsed = ProfileSchema.safeParse(JSON.parse(raw));
   if (!parsed.success) throw new Error(`data/profile.json is invalid:\n${parsed.error.message}`);
   return parsed.data;
+}
+
+/** Where the candidate is based: `location` when the profile gives one, else the mailing address's city and region. */
+export function basedIn(profile: Pick<Profile, "address" | "location">): { city: string; region: string; regionCode: string; country: string } {
+  const { address, location } = profile;
+  if (!location) return { city: address.city, region: address.region, regionCode: address.regionCode, country: address.country };
+  return { city: location.city, region: location.region, regionCode: location.regionCode ?? "", country: address.country };
 }
 
 /** Countries where the candidate may work now but will need sponsorship later. Empty when the profile lists none. */

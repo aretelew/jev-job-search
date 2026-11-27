@@ -29,6 +29,9 @@ describe("how the candidate heard about the job", () => {
     expect(sourceHold(heard, "LinkedIn", linkedin, job)).toBeNull();
     expect(sourceHold(heard, "Social Media > LinkedIn", linkedin, job)).toBeNull();
     expect(sourceHold(heard, "Job Board > Glassdoor", linkedin, job)).not.toBeNull();
+    // A list's own wording of the same source (NVIDIA's "Linkedin Jobs"), but not another word that starts the same.
+    expect(sourceHold(heard, "Job Board > Linkedin Jobs", linkedin, job)).toBeNull();
+    expect(sourceHold(heard, "LinkedInfluencers", linkedin, job)).not.toBeNull();
   });
 
   it("takes a source the person gave for this job, or as a standing answer", () => {
@@ -52,6 +55,8 @@ describe("how the candidate heard about the job", () => {
     expect(alternatesFor({ key: "how_did_you_hear", kind: "combobox" }, { ...online, answers: [...online.answers, rule] })).toEqual({ alternates: ["Other"] });
     // The value already tried is not offered again.
     expect(alternatesFor({ key: "how_did_you_hear", kind: "combobox", value: "Other" }, withFallback)).toEqual({ alternates: ["LinkedIn"] });
+    // Under a heading, the person's source is tried under the same heading first (NVIDIA files it as "Job Board > Linkedin Jobs").
+    expect(alternatesFor({ key: "how_did_you_hear", kind: "combobox", value: "Job Board > Other" }, withFallback)).toEqual({ alternates: ["Job Board > LinkedIn", "Other", "LinkedIn"] });
     // A box that takes any text gets the profile's own words.
     expect(alternatesFor({ key: "how_did_you_hear", kind: "text" }, withFallback)).toEqual({});
   });
@@ -67,8 +72,9 @@ describe("how the candidate heard about the job", () => {
     expect(sourcePlan(list(["Other", "Referral"]), fallback, job)).toMatchObject({ value: "Other" });
     expect(sourcePlan(list(["Acme Careers Site", "Referral"]), fallback, job)).toMatchObject({ value: "Acme Careers Site > Other" });
     // Nothing generic: the source the person named, as the list writes it if it has it.
-    expect(sourcePlan(list(["Referral", "Linkedin", "Career Fair"]), fallback, job)).toMatchObject({ value: "LinkedIn", note: "the source the person named" });
+    expect(sourcePlan(list(["Referral", "Linkedin", "Career Fair"]), fallback, job)).toMatchObject({ value: "Linkedin", note: "the source the person named" });
     expect(sourcePlan(list(["Referral", "Social Media"]), fallback, job)).toMatchObject({ value: "LinkedIn" });
+    expect(sourcePlan(list(["Referral", "Linkedin Jobs"]), fallback, job)).toMatchObject({ value: "Linkedin Jobs" });
     // A path under this list's own heading was given for this form, and comes first.
     const forSignet: Profile = { ...fallback, answers: [...fallback.answers, { question: "How Did You Hear About Us?", answer: "Job Boards > Indeed" }] };
     expect(sourcePlan(signet, forSignet, job)).toMatchObject({ value: "Job Boards > Indeed", note: "the source the person named" });

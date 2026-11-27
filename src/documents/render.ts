@@ -8,7 +8,7 @@ import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "n
 import path from "node:path";
 import { BROWSER, childEnv, DOCUMENTS, PATHS } from "../config.js";
 import type { QueueEntry } from "../jobs/queue.js";
-import type { Profile } from "../profile/schema.js";
+import { basedIn, type Profile } from "../profile/schema.js";
 import type { Tailored } from "./tailor.js";
 import { renderTemplate, type View } from "./template.js";
 import { activeTemplate } from "./templates.js";
@@ -70,7 +70,8 @@ export function coverView(profile: Profile, entry: { job: { company: string; tit
 }
 
 const contactText = (profile: Profile) => {
-  const bits = [profile.email, `${profile.phone.countryCode} ${profile.phone.national}`, `${profile.address.city}, ${profile.address.regionCode || profile.address.region}`];
+  const at = basedIn(profile);
+  const bits = [profile.email, `${profile.phone.countryCode} ${profile.phone.national}`, `${at.city}, ${at.regionCode || at.region}`];
   const links = Object.entries(profile.links ?? {}).filter(([, v]) => typeof v === "string" && v) as [string, string][];
   for (const [, url] of links) bits.push(url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""));
   return bits.join(" \u00b7 ");

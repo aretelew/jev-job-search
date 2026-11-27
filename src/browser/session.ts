@@ -121,19 +121,15 @@ export async function goto(page: Page, url: string): Promise<void> {
   await install(page);
 }
 
-/** Clicks and typing need the tab in front, so tabs filled side by side take turns for them. */
 let turn: Promise<unknown> = Promise.resolve();
-export function inFront<T>(page: Page, work: () => Promise<T>): Promise<T> {
-  return inTurn(async () => {
-    await page.bringToFront();
-    return work();
-  });
-}
 
 /**
- * Anything that changes which tab is in front takes the same turns: opening a tab, closing one.
- * A tab that opens while another is being typed into takes the window from it, and a box that
- * loses the window in the middle of typing can throw the text away.
+ * Clicks, typing, and anything that changes which tab is in front (opening a tab, closing one), one
+ * at a time: keys go to one place, and a box that loses the window in the middle of typing can throw
+ * the text away. The tab is not brought to the front. Each form has a window of its own
+ * (newBackgroundWindow), which keeps it visible to Chrome, and focus is emulated, so the input lands
+ * without taking the person's screen: on macOS bringing a tab to the front brings all of Chrome with
+ * it. Where the person is needed (a robot check, a sign-in), the caller brings the tab forward on purpose.
  */
 export function inTurn<T>(work: () => Promise<T>): Promise<T> {
   const run = turn.then(work);

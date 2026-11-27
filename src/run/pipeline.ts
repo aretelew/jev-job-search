@@ -5,7 +5,7 @@
  * Fills run side by side and paced per site, the writer takes a few forms at
  * a time, and submissions go one at a time with a pause per site.
  */
-import { ACCOUNTS, RUN } from "../config.js";
+import { ACCOUNTS, RUN, writerName } from "../config.js";
 import { accountGate, adapterFor, capabilityFor } from "../accounts/capability.js";
 import { signedInNow } from "../accounts/gate.js";
 import { ensureBrowser, sleep } from "../browser/cdp.js";
@@ -24,9 +24,10 @@ import { learn, loadKnowledge } from "../knowledge/sites.js";
 import { loadRows, saveRows, takeHomeCell, upsertEntry } from "../log/csv.js";
 import { loadProfile, type Profile } from "../profile/schema.js";
 import { limiter, paced, spacer } from "../util/pace.js";
-import { outcomeOf } from "./outcome.js";
+import { outcomeOf, UNKNOWN_REASON } from "./outcome.js";
 import { documentPolicy, tailorJob } from "../documents/tailor.js";
 import { printFill } from "./print.js";
+import { liveDone, liveJobs, liveRecorded, liveStep } from "./live.js";
 
 export type RunOptions = { submit: boolean; dry: boolean; fresh: boolean; quiet: boolean; fillOnly?: boolean; /** The person named these jobs and is there: a sign-in only they can do is waited for. */ waitAtSignIn?: boolean };
 
@@ -127,11 +128,13 @@ type RowExtra = Partial<Record<"What They Do" | "Why You're a Fit" | "Notes" | "
 
 /** Records an outcome in the queue and in the record files, as one step under the store lock. */
 export function record(id: string, status: QueueEntry["status"], reason: string | null, extra: RowExtra = {}, waitingFor: QueueEntry["waitingFor"] = null): QueueEntry {
-  return withStore(() => {
+  const e = withStore(() => {
     const e = mutateQueue((q) => updateEntry(q, id, { status, statusReason: reason, waitingFor, ...(status === "applied" ? { appliedAt: new Date().toISOString() } : {}) }));
     saveRows(upsertEntry(loadRows(), e, extra));
     return e;
   });
+  liveRecorded(id, status, reason);
+  return e;
 }
 
 /** Records an application as sent. A take-home the form asked for goes into the record too, so takehome.csv lists it for the person. */
@@ -160,6 +163,7 @@ export const endIfAbandoned = () => {
 async function fillOnce(jev: JevClient, profile: Profile, e: QueueEntry, dry = false): Promise<FillReport> {
   const attempt = new AbortController();
   let timer: NodeJS.Timeout | undefined;
+  liveStep(e.job.id, "opening", "Opening the form");
   const filling = fillJob(jev, forJob(profile, e), asJob(e), { signal: attempt.signal, dry });
   filling.catch(() => undefined);
   try {
@@ -206,6 +210,7 @@ export async function waitedAtSignIn(e: QueueEntry, r: FillReport, o: { waitMs?:
   if (!o.seen && !(await hasOpenTab(e.job.id))) return false;
   const waitMs = o.waitMs ?? RUN.signInWaitMs;
   if (!o.seen) notify("jev-job-search needs you", `${e.job.company}: sign in, and the form is filled for you`);
+  liveStep(e.job.id, "watching", "Waiting for you to sign in, in the tool's Chrome window");
   console.log(`${e.job.company} asks you to sign in. Its page is in front in the tool's Chrome window: sign in there yourself, and the run carries on. Waiting up to ${Math.round(waitMs / 60_000)} minutes.`);
   const deadline = Date.now() + waitMs;
   do {
@@ -238,7 +243,6 @@ function waitsAtSignIn(id: string): boolean {
 
 const CODE_REASON = "the board emailed you a code to confirm a person is applying. The filled form is open in the tool's window";
 const ROBOT_REASON = "the site asks you to confirm you are not a robot. The filled form is open in the tool's window";
-const UNKNOWN_REASON = "Submit was clicked and no confirmation was seen";
 
 /** Keeps a job's tab for later, with why: it waits for the person, or for a confirmation. */
 const keepTab = (id: string, state: "awaiting_user_action" | "awaiting_email_verification" | "submission_unknown") =>
@@ -284,6 +288,8 @@ const siteOf = (id: string) => {
  * filled or sent again until `reconcile` or the person settles it.
  */
 export function submitAndRecord(jev: JevClient, id: string, force: boolean, keepOpen = false): Promise<boolean> {
+  // Submissions are paced per employer and per site, so a ready form may wait here a while.
+  liveStep(id, "submitting", "Ready. Waiting its turn to be sent (submissions are paced per site)");
   return perEmployer(employerOf(id), () => submitAndRecordOnSite(jev, id, force, keepOpen));
 }
 
@@ -291,6 +297,7 @@ function submitAndRecordOnSite(jev: JevClient, id: string, force: boolean, keepO
   return perSite(siteOf(id), () =>
     oneAtATime(async () => {
       let clicked = false;
+      liveStep(id, "submitting", "Checking the required fields once more and clicking Submit");
       const close = async () => {
         if (!keepOpen) await closeJobTab(id);
       };
@@ -492,17 +499,28 @@ async function walk(jev: JevClient, profile: Profile, e: QueueEntry, first: Fill
   for (;;) {
     // A form that could not be opened has nothing to resolve.
     if (r.state !== "filled") return r;
+    const open = r.drafts.length + r.reviews.length + r.failed.length;
+    if (open) liveStep(e.job.id, "writing", `Page ${r.page}: ${writerName().name} is answering ${open} open question${open === 1 ? "" : "s"}`, r.page);
     r = await resolvePage(jev, profile, e, r, o.fresh);
     // What did not take its value goes back to the writer with the reason (a list that has no such choice, a box that
     // shows something else), instead of the form being given up. It stops when a round changes nothing.
     const seen = new Set<string>();
     for (let round = 1; round < RUN.resolveRounds && askAgain(r, seen); round++) {
       if (!o.quiet) console.log(`${e.job.company}: ${r.failed.length} box(es) did not take their value. Asking Claude how to answer them (round ${round + 1}).`);
+      liveStep(e.job.id, "writing", `Page ${r.page}: ${r.failed.length} box(es) did not take their value, asking again (round ${round + 1})`, r.page);
       r = await resolvePage(jev, profile, e, r, true);
     }
     if (!shouldAdvance(r)) return r;
+    liveStep(e.job.id, "next_page", `Page ${r.page} done, going to page ${r.page + 1}`, r.page + 1);
     r = await nextPage(jev, forJob(profile, e), asJob(e), { dry: o.dry });
   }
+}
+
+/** A job whose run threw: said on the console and on the live panel, and the other jobs go on. */
+function stopped(e: QueueEntry, err: unknown): void {
+  const why = err instanceof Error ? err.message : String(err);
+  console.log(`${e.job.id}  ${why}`);
+  liveDone(e.job.id, "failed", `Stopped: ${why}`);
 }
 
 /** Records what became of one job, and sends its form when it is ready and sending was asked for. True when the application went through. */
@@ -510,12 +528,18 @@ async function settle(jev: JevClient, r: FillReport, o: RunOptions): Promise<boo
   const outcome = outcomeOf(r, RUN.maxPages);
   // What this form taught about its site: how many pages it has, and whether it ended ready. A rehearsal teaches the same.
   if (r.state === "filled" && !o.fillOnly) learn(r.url, { pages: r.page, form: { ready: outcome.action === "send" } });
-  if (o.dry) {
-    await closeJobTab(r.jobId);
+  // A rehearsal or a fill-only run records nothing: the live panel is told what would have happened.
+  if (o.dry || o.fillOnly) {
+    if (outcome.action === "send") liveDone(r.jobId, "ready", `Ready to send${o.dry ? ". A rehearsal, so nothing was sent" : ". Filled only, not sent"}`);
+    else liveDone(r.jobId, "rehearsed", `Would be left for you${outcome.reason ? `: ${outcome.reason}` : ""}`);
+    if (o.dry) await closeJobTab(r.jobId);
     return false;
   }
-  if (o.fillOnly) return false;
-  if (outcome.action === "send") return o.submit ? submitAndRecord(jev, r.jobId, false) : false;
+  if (outcome.action === "send") {
+    if (o.submit) return submitAndRecord(jev, r.jobId, false);
+    liveDone(r.jobId, "ready", "Filled and ready. This run does not send, so it waits for: npx jev submit");
+    return false;
+  }
   const rec = record(r.jobId, outcome.action, outcome.reason, {}, outcome.waitingFor ?? null);
   if (outcome.action === "awaiting_user_action" || outcome.action === "awaiting_email_verification") {
     // A sign-in only the person can finish: the page stays open for them, they are told, and the run moves on.
@@ -541,6 +565,7 @@ export async function pipeline(entries: QueueEntry[], o: RunOptions): Promise<{ 
   const after: Promise<void>[] = [];
   /** Jobs to fill once more when the rest are done, each with the window to itself. */
   const again: QueueEntry[] = [];
+  liveJobs(entries);
   const finish = async (e: QueueEntry, r: FillReport) => {
     reports[entries.indexOf(e)] = r;
     if (!o.quiet) printFill(r);
@@ -563,7 +588,7 @@ export async function pipeline(entries: QueueEntry[], o: RunOptions): Promise<{ 
       const r = o.fillOnly ? first : await writer(() => walk(jev, profile, e, first, o));
       if (RUN.fillAttempts > 1 && worthAnotherGo(r)) again.push(e);
       else await finish(e, r);
-    })().catch((err) => console.log(`${e.job.id}  ${err instanceof Error ? err.message : String(err)}`));
+    })().catch((err) => stopped(e, err));
     // One job at a time (RUN.fillConcurrency 1) means each job goes from fill to submit before the next opens. With more
     // tabs, a site that saves every field to its server (Ashby) still gets that, since it drops saves from several forms at
     // once; elsewhere the rest of a job's path does not hold a fill slot and the next form starts filling now.
@@ -575,11 +600,12 @@ export async function pipeline(entries: QueueEntry[], o: RunOptions): Promise<{ 
   // Some boxes only take a value while their tab keeps the window: a phone box on a page that is still loading its own
   // checker, for one. With five forms side by side no tab keeps it for long. These forms are filled again, one at a time.
   for (const e of again) {
+    liveStep(e.job.id, "waiting", "Some values did not stick. It is filled once more when the others are done");
     try {
       const first = await fillOnce(jev, profile, e, o.dry);
       await finish(e, o.fillOnly ? first : await walk(jev, profile, e, first, o));
     } catch (err) {
-      console.log(`${e.job.id}  ${err instanceof Error ? err.message : String(err)}`);
+      stopped(e, err);
     }
   }
   return { reports, sent };

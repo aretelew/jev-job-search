@@ -83,6 +83,8 @@ export type DailyDeps = {
   log: (line: string) => void;
   /** True once the person asked this run to stop. Looked at before every application. */
   stop?: () => boolean;
+  /** Told, before every application, how many of the day's applications are done, for the dashboard's live panel. */
+  progress?: (target: number, done: number) => void;
   pausesFile?: string;
 };
 
@@ -165,6 +167,7 @@ export async function dailyRun(policy: Policy, o: { target?: number; maxAttempts
     const day = countToday(entries, today);
     // In a rehearsal nothing is recorded, so what it would have sent is counted from the run itself.
     const done = o.dry ? before.sent + before.unconfirmed + summary.sent.length : day.sent + day.unconfirmed;
+    deps.progress?.(target, done);
     if (deps.stop?.()) return end("you asked it to stop");
     if (done >= target) return end(`the day's ${target} applications are done`);
     if (challenged.size >= DAILY.challengesStopRun) return end(`${challenged.size} boards asked for a human check, so the run stopped for today`);

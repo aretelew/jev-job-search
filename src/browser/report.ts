@@ -135,11 +135,14 @@ export const emptyRequired = (d: FieldsDump, plan: FillPlan, shown: string[], st
  * (showsValue); a choice by the option that was picked; a checkbox by whether it is ticked.
  * Anything else only has to show something.
  */
+/** True when a checkbox's value means ticked, however a caller spells it. */
+export const ticks = (value: string | null | undefined): boolean => /^(true|yes|1|on|checked)$/i.test(value ?? "");
+
 export function showsPlanned(f: { kind: string; value: string | null; optionLabel?: string | null; values?: string[] | undefined }, shown: string): boolean {
   const value = f.value ?? "";
   const n = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
   if (f.values?.length) return showsEvery(f.values, shown);
-  if (f.kind === "checkbox") return /^(true|yes|1|on|checked)$/i.test(value) ? !!shown : !shown;
+  if (f.kind === "checkbox") return ticks(value) ? !!shown : !shown;
   if (f.kind === "radio" || f.kind === "select") {
     const expect = [f.optionLabel, value].filter((x): x is string => !!x);
     return !!shown && expect.some((e) => n(e) === n(shown) || showsValue(e, shown));

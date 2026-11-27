@@ -13,6 +13,8 @@ import { BROWSER, childEnv } from "../../src/config.js";
 export type TestChrome = {
   /** A new tab, attached. */
   tab: () => Promise<Page>;
+  /** Where this Chrome answers DevTools calls, for the functions that take one. */
+  root: string;
   close: () => Promise<void>;
 };
 
@@ -37,7 +39,7 @@ export async function startChrome(): Promise<TestChrome> {
   for (let i = 0; i < 80; i++) {
     if (await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)) {
       const tab = async () => Page.attach((await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json()) as Target);
-      return { tab, close };
+      return { tab, root: `http://127.0.0.1:${port}`, close };
     }
     await sleep(250);
   }

@@ -87,6 +87,13 @@ describe("what an email's link may be", () => {
     expect(usable(mail({ text: "", html: `<a href="https://user:pw@acme.wd5.myworkdayjobs.com/Careers/activate/abc">x</a>` }), req())).toMatch(/does not lead/);
   });
 
+  it("knows the act in any wording of the path, and never takes an unsubscribe link", () => {
+    for (const path of ["/Careers/emailVerification/abc", "/Careers/accountActivation?t=abc", "/Careers/verifyEmail/abc", "/Careers/confirm-account/abc"]) {
+      expect(usable(mail({ text: "", html: `<a href="${ORIGIN}${path}">Verify</a>` }), req())).toEqual({ link: `${ORIGIN}${path}`, code: null });
+    }
+    expect(usable(mail({ text: "", html: `<a href="${ORIGIN}/Careers/unsubscribe/confirm">Stop</a>` }), req())).toMatch(/no verification link/);
+  });
+
   it("refuses two different links, and an email with none", () => {
     expect(usable(mail({ text: `${LINK} or ${ORIGIN}/Careers/activate/zzz999` }), req())).toMatch(/more than one/);
     expect(usable(mail({ text: "Welcome.", html: `<a href="${ORIGIN}/Careers/job/1">See the job</a>` }), req())).toMatch(/no verification link/);

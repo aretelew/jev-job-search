@@ -10,7 +10,7 @@ import path from "node:path";
 import { sleep, type Page } from "./cdp.js";
 import { emptyRequired, loadPlan, loadReport, pickSubmit, showsPlanned } from "./report.js";
 import type { FillPlan } from "../forms/fields.js";
-import { controlStates, dump, inFront, install, pageFor, shownValues, type Point } from "./session.js";
+import { controlStates, dump, inTurn, install, pageFor, shownValues, type Point } from "./session.js";
 
 export type SubmitResult = {
   state: PageState["state"];
@@ -80,7 +80,7 @@ export async function submitJob(jev: JevClient, jobId: string, opts: { force?: b
     await page.writesSettled(BROWSER.saveMs);
     const before = await page.evaluate<string>("window.__awj.pageText()");
     // Other forms may be filling in their own tabs. The click takes its turn for the front of the window.
-    await inFront(page, async () => {
+    await inTurn(async () => {
       let p = await page.awj<Point>("point", pick.selector);
       if (!p.ok) throw new Error(`Submit control ${pick.selector} is not on the page.`);
       // A cookie banner over the button would take the click. It is answered with its most private choice

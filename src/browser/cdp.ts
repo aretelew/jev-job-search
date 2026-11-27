@@ -14,9 +14,10 @@ export type Target = { id: string; type: string; url: string; title: string; web
 const base = () => `http://127.0.0.1:${BROWSER.port}`;
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-export async function listTargets(): Promise<Target[] | null> {
+/** The tabs of the runner's Chrome, or of the Chrome at `root` (a test's own). */
+export async function listTargets(root = base()): Promise<Target[] | null> {
   try {
-    const res = await fetch(`${base()}/json/list`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${root}/json/list`, { signal: AbortSignal.timeout(1500) });
     return ((await res.json()) as Target[]).filter((t) => t.type === "page");
   } catch {
     return null;
@@ -40,7 +41,7 @@ export async function ensureBrowser(): Promise<void> {
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",
-      "--window-size=1280,1000",
+      `--window-size=${BROWSER.windowWidth},${BROWSER.windowHeight}`,
       "about:blank",
     ],
     { detached: true, stdio: "ignore", env: childEnv() },
@@ -53,9 +54,51 @@ export async function ensureBrowser(): Promise<void> {
   throw new Error(`Chrome did not start on port ${BROWSER.port}. Is ${BROWSER.chromePath} installed?`);
 }
 
-export async function newTab(url: string): Promise<Target> {
-  const res = await fetch(`${base()}/json/new?${encodeURIComponent(url)}`, { method: "PUT" });
+export async function newTab(url: string, root = base()): Promise<Target> {
+  const res = await fetch(`${root}/json/new?${encodeURIComponent(url)}`, { method: "PUT" });
   return (await res.json()) as Target;
+}
+
+/** One call to the browser itself, not to a tab: the endpoint /json/version names. Gives up after BROWSER.browserCallMs. */
+async function browserCall<T>(method: string, params: Record<string, unknown>, root: string): Promise<T> {
+  const signal = AbortSignal.timeout(BROWSER.browserCallMs);
+  const { webSocketDebuggerUrl } = (await (await fetch(`${root}/json/version`, { signal })).json()) as { webSocketDebuggerUrl: string };
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      signal.addEventListener("abort", () => reject(new Error("the browser did not answer in time")), { once: true });
+      ws.onerror = () => reject(new Error("the browser did not answer"));
+      ws.onopen = () => ws.send(JSON.stringify({ id: 1, method, params }));
+      ws.onmessage = (ev) => {
+        const m = JSON.parse(String(ev.data)) as { id?: number; result?: T; error?: { message: string } };
+        if (m.id !== 1) return;
+        if (m.error) reject(new Error(m.error.message));
+        else resolve(m.result as T);
+      };
+    });
+  } finally {
+    ws.close();
+  }
+}
+
+/**
+ * A tab in a window of its own, opened behind whatever the person is using. Being the only tab of its
+ * window, it stays visible to Chrome, so clicks and typing land without bringing it to the front: the
+ * person's screen is left alone. Falls back to a tab in the main window if the browser cannot.
+ * `root` is the runner's Chrome, or a test's own.
+ */
+export async function newBackgroundWindow(url: string, root = base()): Promise<Target> {
+  try {
+    const { targetId } = await browserCall<{ targetId: string }>("Target.createTarget", { url, newWindow: true, background: true, width: BROWSER.windowWidth, height: BROWSER.windowHeight }, root);
+    for (let i = 0; i < 20; i++) {
+      const t = (await listTargets(root))?.find((x) => x.id === targetId);
+      if (t) return t;
+      await sleep(100);
+    }
+  } catch {
+    // An older Chrome, or a browser that will not make a window: the tab of before.
+  }
+  return newTab(url, root);
 }
 
 export async function closeTab(id: string): Promise<void> {

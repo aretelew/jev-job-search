@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { BriefcaseIcon, CalendarClockIcon, InboxIcon, LayoutDashboardIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { loadAll, needCount, ReloadContext, type Data, type Loaded } from "@/lib/api";
+import { loadAll, needCount, ReloadContext, useLive, type Data, type Loaded } from "@/lib/api";
 import { Overview } from "@/screens/overview";
 import { NeedsYou } from "@/screens/needs";
 import { Applications } from "@/screens/applications";
@@ -79,6 +79,15 @@ export function App() {
   }, [reload]);
 
   const live = data?.live ?? false;
+  const run = useLive(live);
+  const running = run?.state === "running";
+  // Each job a run finishes, and the run's end, change the records: they are loaded again so the numbers move with the run.
+  const settled = run?.live ? `${run.state}:${run.live.startedAt}:${run.live.jobs.filter((j) => j.step === "done").length}` : "";
+  const seen = useRef("");
+  useEffect(() => {
+    if (seen.current && settled !== seen.current) void reload();
+    seen.current = settled;
+  }, [settled, reload]);
   const screen = screenFrom(hash, live);
   const shown = SCREENS.filter((s) => live || !s.live);
   const current = shown.find((s) => s.key === screen) ?? shown[0]!;
@@ -110,6 +119,11 @@ export function App() {
                         <span>{s.label}</span>
                       </SidebarMenuButton>
                       {s.key === "needs" && count ? <SidebarMenuBadge className="bg-warning/15 text-warning">{count}</SidebarMenuBadge> : null}
+                      {s.key === "overview" && running ? (
+                        <SidebarMenuBadge aria-label="A run is working">
+                          <span className="size-2 animate-pulse rounded-full bg-success" />
+                        </SidebarMenuBadge>
+                      ) : null}
                     </SidebarMenuItem>
                   ))}
                 </SidebarMenu>
@@ -128,6 +142,12 @@ export function App() {
             <Separator orientation="vertical" className="mr-1 data-vertical:h-4" />
             <span className="text-sm font-medium">{current.label}</span>
             <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              {running && screen !== "overview" ? (
+                <button type="button" onClick={() => go("overview")} className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 font-medium text-success transition-colors hover:bg-success/15">
+                  <span className="size-1.5 animate-pulse rounded-full bg-success" />
+                  Run in progress
+                </button>
+              ) : null}
               {data?.report.value ? <span className="hidden sm:inline">Updated {new Date(data.report.value.generatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span> : null}
               {live ? (
                 <Button variant="ghost" size="icon-sm" aria-label="Refresh" onClick={() => void reload()} disabled={loading}>
@@ -149,7 +169,7 @@ export function App() {
               </div>
             ) : (
               <section id={`s-${screen}`}>
-                {screen === "overview" ? <Show loaded={data.report}>{(report) => <Overview report={report} needs={data.live ? data.needs.value : undefined} live={data.live} go={go} />}</Show> : null}
+                {screen === "overview" ? <Show loaded={data.report}>{(report) => <Overview report={report} needs={data.live ? data.needs.value : undefined} live={data.live} run={run} go={go} />}</Show> : null}
                 {screen === "applications" ? <Show loaded={data.report}>{(report) => <Applications report={report} live={data.live} />}</Show> : null}
                 {screen === "needs" && data.live ? <Show loaded={data.needs}>{(needs) => <NeedsYou needs={needs} />}</Show> : null}
                 {screen === "daily" && data.live ? <Show loaded={data.auto}>{(auto) => <DailyRun auto={auto} />}</Show> : null}

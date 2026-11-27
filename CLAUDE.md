@@ -125,7 +125,13 @@ doctor` says what is in place and what to do next.
   one on its own, and every writer runs with no tools: an API is offered
   none, and Codex is started with its shell and web search off, the person's
   config and MCP servers left out, in a read-only sandbox in an empty folder
-  (`codexArgs`). Never loosen those arguments.
+  (`codexArgs`). Never loosen those arguments. The one call that may
+  search the web is the company research step (`src/answers/research.ts`):
+  it is told the company's name and the public posting and never the
+  profile, its only tools are web search and reading a page
+  (`researchCodexArgs`, `researchClaudeArgs`), and its reply is parsed into
+  short facts with sources that reach the writer as data. Never give it the
+  profile or another tool.
 - **Nothing about one candidate in source.** Years, cities, drafts and
   phrasing come from the profile, `data/bank.json` and
   `data/voice.local.md`.

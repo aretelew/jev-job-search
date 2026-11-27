@@ -13,6 +13,7 @@ import { loadRows, saveRows, upsertEntry } from "../log/csv.js";
 import { loadDaily, localDay, requestStop, stopRequested } from "../run/daily.js";
 import { settleReview } from "../run/inbox.js";
 import { Level, loadPolicy, Policy, Where } from "../run/policy.js";
+import { liveView } from "../run/live.js";
 import { installSchedule, nextRun, removeSchedule, scheduleStatus } from "../run/schedule.js";
 import { currentRun, withStore, writeAtomic } from "../util/store.js";
 import { buildReport, StatusChange } from "./data.js";
@@ -124,6 +125,7 @@ export function startReportServer(port: number = REPORT.port): Promise<string> {
         if (url.pathname === "/api/data") return json(res, { ...buildReport(loadRows(), loadQueue().entries) });
         if (url.pathname === "/api/needs") return json(res, buildNeeds(loadQueue().entries));
         if (url.pathname === "/api/automation") return json(res, automation());
+        if (url.pathname === "/api/live") return json(res, liveView());
         return send(res, 404, "text/plain", "not found");
       }
       if (req.method !== "POST") return send(res, 405, "text/plain", "not allowed");
