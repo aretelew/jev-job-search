@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ProfileSchema, type Profile } from "../src/profile/schema.js";
-import { asksForPlaces, capOf, locationQuestions, namesCity, placeQuestions, planLocation } from "../src/forms/locations.js";
+import { asksForPlaces, locationQuestions, namesCity, placeQuestions, planLocation } from "../src/forms/locations.js";
+import { capOf } from "../src/forms/groups.js";
 import { tookChoice } from "../src/browser/fill.js";
 import { showsEvery, showsPlanned } from "../src/browser/report.js";
 import type { DumpedField } from "../src/forms/fields.js";

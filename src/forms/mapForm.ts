@@ -22,7 +22,8 @@ import type { Job } from "../jobs/normalize.js";
 import type { DumpedField, FieldsDump, FillPlan, PlannedField } from "./fields.js";
 import { documentPolicy, documentsFor, tailorJob } from "../documents/tailor.js";
 import { loadQueue } from "../jobs/queue.js";
-import { capOf, planLocations } from "./locations.js";
+import { planLocations } from "./locations.js";
+import { capOf, capTicks } from "./groups.js";
 import { salaryRule } from "../profile/pay.js";
 
 const NONE = "__none__";
@@ -97,7 +98,7 @@ export function buildFormState(profile: Profile, job: Job, dump: FieldsDump, fie
 }
 
 /** Raised whenever the gates below change, so a plan cached under the old rules is not reused. */
-const PLAN_VERSION = 30;
+const PLAN_VERSION = 31;
 
 /** A box that asks for somebody else's contact details: a reference, a supervisor, an emergency contact. Never the applicant's. */
 const OTHER_PERSON = /\b(reference|referee|referr(?:al|er)|referred by|supervisor|manager|emergency|next of kin|recruiter|contact person|guardian|parent|spouse|alternate|secondary)\b/i;
@@ -689,7 +690,8 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
       note: file ? (want === "resume" && file !== profile.resume.path ? "the resume written for this job" : want === "cover" ? "the cover letter written for this job" : null) : want === "autofill" ? "autofill helper, skipped so it does not overwrite the plan" : want === "transcript" ? "asks for a transcript. Set transcript.path in your profile to attach one" : want === "graduate_transcript" ? "asks for a graduate transcript, and the profile has no graduate degree" : want === "cover" ? "asks for a cover letter. Run apply --cover to write one" : "not a resume upload",
     });
   });
-  const ordered = dump.fields.map((f) => planned.find((p) => p.id === f.id) as PlannedField);
+  // A group of tick boxes whose question says how many it takes gets no more than that.
+  const ordered = capTicks(dump.fields.map((f) => planned.find((p) => p.id === f.id) as PlannedField), dump.fields);
   return {
     jobId: job.id,
     url: dump.url,

@@ -19,6 +19,7 @@ import type { Answer, Questions } from "../jev/types.js";
 import type { Job } from "../jobs/normalize.js";
 import type { Profile } from "../profile/schema.js";
 import { checkboxGroups, type DumpedField, type PlannedField } from "./fields.js";
+import { capOf } from "./groups.js";
 
 /** A word for one of the employer's places. "Located" is not one: "where are you located" asks where the person lives. */
 const PLACE_WORD = /\b(?:locations?|offices?|cit(?:y|ies)|sites?|hubs?|campus(?:es)?|metro areas?)\b/i;
@@ -28,9 +29,6 @@ const ASKS_CHOICE = /\b(?:which|select|choose|pick|prefer(?:red|ence|ences)?|int
 const NOT_A_PLACE_CHOICE = /\byour (?:current |home )?location\b|\bcurrently (?:live|living|located|based|resid)|\bwhere (?:do )?you (?:live|are (?:currently )?(?:located|based))|\bresid|\bhear\b|\bheard\b|\bsource\b|\breferr|\bweb ?site\b|\bjob site\b|\bsocial\b/i;
 /** A name for the employer's places that is a choice on its own: "Office location", "Work locations". */
 const WORK_PLACE = /\b(?:office|work|working|job|desired|target) locations?\b/i;
-/** A question that says how many it takes: "up to 3", "no more than two", "your top 3". */
-const CAP = /\b(?:up to|at most|no more than|maximum(?: of)?|max\.?|a limit of|your top|top)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
-const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
 
 /** Other names forms give the cities people name most: "NYC" for New York, "SF" for San Francisco. Case matters: "LA" is not "La Jolla". */
 const OTHER_NAMES: Record<string, RegExp> = {
@@ -51,14 +49,6 @@ export type LocationQuestion = {
 /** True when a question asks which of the employer's places the candidate would work at. */
 export function asksForPlaces(question: string): boolean {
   return PLACE_WORD.test(question) && (ASKS_CHOICE.test(question) || WORK_PLACE.test(question)) && !NOT_A_PLACE_CHOICE.test(question);
-}
-
-/** How many choices the question allows, when it says. */
-export function capOf(text: string): number | null {
-  const m = CAP.exec(text);
-  if (!m?.[1]) return null;
-  const n = /^\d+$/.test(m[1]) ? Number(m[1]) : (WORDS[m[1].toLowerCase()] ?? 0);
-  return n > 0 ? n : null;
 }
 
 /** An option that only stands in for a choice: "Select...", "--". */
