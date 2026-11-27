@@ -2,11 +2,25 @@
 // Installs window.__awj: small read-only helpers plus the few writes the
 // runner cannot do with real input events. Nothing here is page-supplied code.
 (() => {
-  const q = (s) => document.querySelector(s);
+  // A form drawn inside web components (SmartRecruiters) lives in their shadow roots. A selector reaches into one
+  // with " >>> ": each part after the first is looked for in the shadow root of the element the part before it
+  // found, as dumpFields.js wrote it. A selector without it is plain CSS.
+  const q = (s) => { let el = null; let root = document; for (const part of s.split(" >>> ")) { if (!root) return null; el = root.querySelector(part); root = el && el.shadowRoot; } return el; };
+  // Every element that matches, in the page and in every open shadow root in it, in page order.
+  const deepAll = (sel, from = document) => { const out = []; const walk = (r) => { for (const el of r.querySelectorAll("*")) { if (el.matches(sel)) out.push(el); if (el.shadowRoot) walk(el.shadowRoot); } }; walk(from); return out; };
+  const inShadow = (el) => el.getRootNode() instanceof ShadowRoot;
+  // An id names an element in its own shadow root, or in one of the roots around it.
+  const byId = (el, id) => { for (let r = el.getRootNode(); r; r = r instanceof ShadowRoot ? r.host.getRootNode() : null) { const n = r.getElementById(id); if (n) return n; } return null; };
+  // Whether a holds b, counting what sits in the shadow roots inside a.
+  const holds = (a, b) => { for (let n = b; n; n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentNode) if (n === a) return true; return false; };
+  // The element that has the keyboard, inside whatever shadow roots it sits in.
+  const active = () => { let a = document.activeElement; while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement; return a; };
+  // The element drawn at a point, inside whatever shadow roots it sits in.
+  const at = (x, y) => { let e = document.elementFromPoint(x, y); while (e && e.shadowRoot) { const inner = e.shadowRoot.elementFromPoint(x, y); if (!inner || inner === e) break; e = inner; } return e; };
   // The options of one question that a radio or checkbox is one of, found as dumpFields.js found them: by name, or for
   // a form that leaves the name off (Gem), the nameless options of the same kind in the nearest box holding more than one control.
   const optionGroup = (el) => {
-    if (el.name) return [...document.querySelectorAll(`input[type=${el.type}][name="${attr(el.name)}"]`)];
+    if (el.name) return [...el.getRootNode().querySelectorAll(`input[type=${el.type}][name="${attr(el.name)}"]`)];
     for (let cur = el.parentElement, depth = 0; cur && cur !== document.body && depth < 6; cur = cur.parentElement, depth++) {
       const controls = [...cur.querySelectorAll("input:not([type=hidden]), select, textarea")];
       if (controls.length > 1) return controls.every((c) => c.type === el.type && !c.name) ? controls : [el];
@@ -15,8 +29,17 @@
   };
   // An attribute value inside a quoted CSS selector: backslashes and quotes escaped.
   const attr = (v) => v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const plainText = (el) => (el.innerText || el.textContent || "").replace(/SVGs? not supported by this browser\.?/gi, "").replace(/\s+/g, " ").trim();
   // The words of an element. An icon's fallback text ("SVGs not supported by this browser.") is not one of them.
-  const text = (el) => (el ? (el.innerText || el.textContent || "").replace(/SVGs? not supported by this browser\.?/gi, "").replace(/\s+/g, " ").trim() : "");
+  // A part of a web component shows the words the page slots into it (a button's "Next", an option's place name),
+  // which are not its own text: they are read from its slots.
+  const text = (el) => {
+    if (!el) return "";
+    const own = plainText(el);
+    if (own || !inShadow(el) || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return own;
+    const slots = el.tagName === "SLOT" ? [el] : [...el.querySelectorAll("slot")];
+    return slots.flatMap((s) => s.assignedNodes({ flatten: true })).map((n) => (n.nodeType === 3 ? n.textContent : n.nodeType === 1 ? plainText(n) : "")).join(" ").replace(/\s+/g, " ").trim();
+  };
   const visible = (el) => {
     if (!el || !el.isConnected) return false;
     const r = el.getBoundingClientRect();
@@ -41,7 +64,7 @@
   // The list a picker opens: named by aria-controls or aria-owns, or by the menu id a button carries (BambooHR).
   const listRootOf = (el) => {
     const listId = el.getAttribute("aria-controls") || el.getAttribute("aria-owns") || el.getAttribute("data-menu-id");
-    return listId ? document.getElementById(listId) : null;
+    return listId ? byId(el, listId) : null;
   };
   // Workday's search-and-pick box: a search input, the list of what is picked, and a list drawn elsewhere on the page.
   const PROMPT = '[data-automation-id="multiSelectContainer"]';
@@ -69,7 +92,8 @@
       if (list) return [...list.querySelectorAll("option, [role=option]")].filter(visible);
     }
     if (!root && el.getAttribute("aria-expanded") !== "true") return [];
-    const all = root ? [...root.querySelectorAll(root.tagName === "DATALIST" ? "option, [role=option]" : "[role=option], [role=menuitem]")] : [...document.querySelectorAll("[role=option]")].filter((o) => !o.closest(".iti") && !o.closest(PROMPT));
+    // The rows of a web component's list draw their option in a shadow root of their own (SmartRecruiters).
+    const all = root ? deepAll(root.tagName === "DATALIST" ? "option, [role=option]" : "[role=option], [role=menuitem]", root) : (inShadow(el) ? deepAll("[role=option]") : [...document.querySelectorAll("[role=option]")]).filter((o) => !o.closest(".iti") && !o.closest(PROMPT));
     return all.filter(visible);
   };
   // Dropdown components keep their option list and their select handler on their own props.
@@ -99,6 +123,15 @@
     const get = a.shape === "select" && a.p.selectProps && a.p.selectProps.getOptionLabel;
     const l = typeof get === "function" ? get(o) : o.label;
     return String(typeof l === "string" || typeof l === "number" ? l : o.label ?? o.name ?? o.placeName ?? o.title ?? o.value ?? "").replace(/\s+/g, " ").trim();
+  };
+  // The words of the page. Text a web component draws inside its shadow root (a label, a confirmation) is not in
+  // the page's own text, so each open shadow root's words follow it. Only what is drawn: a part that is not drawn
+  // (a style sheet, a closed menu) would give all its text, seen or not.
+  const pageWords = () => {
+    if (!document.body) return "";
+    const drawn = (c) => !/^(STYLE|SCRIPT|TEMPLATE|SLOT)$/.test(c.tagName) && c.getClientRects().length > 0;
+    const roots = deepAll("*").filter((e) => e.shadowRoot).map((e) => e.shadowRoot);
+    return [document.body.innerText, ...roots.map((r) => [...r.children].filter(drawn).map((c) => c.innerText || "").join(" ").trim()).filter(Boolean)].join("\n");
   };
   const optionsOf = (a) => (a.shape === "select" ? flat(a.p.options) : a.p.results || []);
   window.__awj = {
@@ -173,7 +206,7 @@
       const el = q(sel);
       if (!el) return "missing";
       // A box drawn by its label counts as there when the label is.
-      const label = (el.type === "radio" || el.type === "checkbox") && (el.closest("label") || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) || el.closest("[role=checkbox]"));
+      const label = (el.type === "radio" || el.type === "checkbox") && (el.closest("label") || (el.id && el.getRootNode().querySelector(`label[for="${CSS.escape(el.id)}"]`)) || el.closest("[role=checkbox]"));
       // A select drawn by select2 counts as there when the box beside it is.
       const select2 = el.tagName === "SELECT" && /select2-hidden/.test(el.className) && el.nextElementSibling;
       return !el.disabled && (el.type === "file" || visible(el) || visible(control(el)) || (label && visible(label)) || (select2 && visible(select2))) ? "on" : "off";
@@ -184,22 +217,23 @@
       if (!el) return false;
       // A menu that opened with its own search box took the keyboard on purpose: typing goes to the list.
       const list = listRootOf(el);
-      return document.activeElement === el || el.contains(document.activeElement) || (!!list && list.contains(document.activeElement));
+      const a = active();
+      return a === el || holds(el, a) || (!!list && holds(list, a));
     },
     /** Puts the keyboard in a text box. False for anything that is not one, or that would not take it. */
     focus(sel) {
       const el = q(sel);
       if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) return false;
       el.focus();
-      return document.activeElement === el;
+      return active() === el;
     },
     selectAll() {
-      const a = document.activeElement;
+      const a = active();
       if (a && typeof a.select === "function") a.select();
     },
     /** How many characters of search text the box holds while it has the keyboard. Only the count; never a password or code box. */
     searchLength(sel) {
-      const a = document.activeElement;
+      const a = active();
       if (!a || a.tagName !== "INPUT" || a.type === "password" || a.autocomplete === "one-time-code" || !this.hasFocus(sel)) return 0;
       return a.value.length;
     },
@@ -335,8 +369,8 @@
       if (!o) return { x: 0, y: 0, ok: false };
       const p = center(o);
       // A list still moving under the pointer would take the click on the row beside this one. The point counts only when this row is what lies under it.
-      const under = p.ok ? document.elementFromPoint(p.x, p.y) : null;
-      return { ...p, ok: !!under && (o.contains(under) || under.contains(o)) };
+      const under = p.ok ? at(p.x, p.y) : null;
+      return { ...p, ok: !!under && (holds(o, under) || holds(under, o)) };
     },
     /**
      * The calendar that belongs to a date box, as the runner needs it to click through: whether it
@@ -397,7 +431,7 @@
       if (el.type === "checkbox" || el.type === "radio") {
         if (el.type === "radio") {
           const on = optionGroup(el).find((r) => r.checked);
-          return on ? text(on.closest("label") || (on.id && document.querySelector(`label[for="${CSS.escape(on.id)}"]`)) || on.parentElement) || on.value : "";
+          return on ? text(on.closest("label") || (on.id && on.getRootNode().querySelector(`label[for="${CSS.escape(on.id)}"]`)) || on.parentElement) || on.value : "";
         }
         return el.checked ? "checked" : "";
       }
@@ -435,32 +469,33 @@
     },
     /** True when the page shows this file name, which is how an accepted upload looks once the input is replaced. */
     showsFile(name) {
-      return (document.body.innerText || "").includes(name) || [...document.querySelectorAll("input[type=file]")].some((i) => i.files && [...i.files].some((f) => f.name === name));
+      return pageWords().includes(name) || deepAll("input[type=file]").some((i) => i.files && [...i.files].some((f) => f.name === name));
     },
     blur() {
-      if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+      const a = active();
+      if (a && a !== document.body) a.blur();
     },
     /**
      * The error messages a page shows. Workday's class names are hashes, so its errors are found by their
      * automation ids. A bare alert role is not taken: banners and "saved" notices use it too.
      */
     errors() {
-      const found = [...document.querySelectorAll('[aria-invalid="true"], [class*="error" i], [data-automation-id*="error" i]')].filter(visible).map(text).filter((t) => t && t.length < 200);
+      const found = deepAll('[aria-invalid="true"], [class*="error" i], [data-automation-id*="error" i]').filter(visible).map(text).filter((t) => t && t.length < 200);
       return [...new Set(found)].slice(0, 20);
     },
     pageText() {
-      return document.body ? document.body.innerText : "";
+      return pageWords();
     },
     controlCount() {
-      return document.readyState !== "loading" ? document.querySelectorAll("input, select, textarea").length : -1;
+      return document.readyState !== "loading" ? deepAll("input, select, textarea").length : -1;
     },
     /** What lies over a control at the point a click would land: empty when nothing does, else the words of the thing in the way (a cookie banner, a chat bubble). */
     coveredBy(sel) {
       const el = q(sel);
       if (!el) return "";
       const p = center(el);
-      const top = document.elementFromPoint(p.x, p.y);
-      if (!top || el.contains(top) || top.contains(el)) return "";
+      const top = at(p.x, p.y);
+      if (!top || holds(el, top) || holds(top, el)) return "";
       // Workday lays a clickable sheet over its buttons: the sheet is the button, and a click on it is a click on the control.
       if (top.getAttribute("data-automation-id") === "click_filter" && top.parentElement === el.parentElement) return "";
       let box = top;

@@ -24,7 +24,7 @@ import { openSections } from "./sections.js";
 import { applyFills, clearBox, TYPED_KINDS, uploadFile, type FillGuide } from "./fill.js";
 import { isProfileKey } from "../profile/fieldKeys.js";
 import { learn, notesFor, signatureOf, type Method } from "../knowledge/sites.js";
-import { blockedReport, comparePages, fieldsBlamed, notOnScreen, showsAnother, showsPlanned, emptyRequired, emptyRequiredFields, isClean, isReady, loadPlan, loadReport, pickNext, savePlan, saveReport, SIGN_IN_REASON, splitFailures, type Failure, type FieldReport, type Fill, type FillReport } from "./report.js";
+import { blockedReport, comparePages, fieldsBlamed, notOnScreen, showsAnother, showsPlanned, emptyRequired, emptyRequiredFields, isClean, isReady, loadPlan, loadReport, pickNext, savePlan, saveReport, SIGN_IN_REASON, BOT_CHECK_REASON, splitFailures, type Failure, type FieldReport, type Fill, type FillReport } from "./report.js";
 import { signInFor } from "../accounts/gate.js";
 import { adapterFor } from "../accounts/capability.js";
 import { liveStep } from "../run/live.js";
@@ -105,6 +105,8 @@ export async function fillJob(jev: JevClient, profile: Profile, job: Job, opts: 
     }
     // Behind a sign-in the page is the application by construction, whatever its first page asks for.
     const isForm = (x: FieldsDump) => isApplicationForm(x) || (!!auth && !x.hasPassword && x.fields.length > 0);
+    // A bot check before the form is the person's to pass. Trying again would only ask for it again.
+    if (!isForm(d) && d.botCheck) return saveReport(blockedReport(job, BOT_CHECK_REASON, d.url, seconds()));
     if (!isForm(d) && !d.hasPassword) {
       // Job boards answer bursts with an error page. One unhurried second try settles most of them.
       const first = await decidePageState(jev, await page.evaluate<string>("window.__awj.pageText()"), d.url, job.id);

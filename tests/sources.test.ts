@@ -7,6 +7,8 @@ import { findGreenhouseBoard, greenhouseFormFor, greenhouseJobId, greenhouseSlug
 import { ashbyJobId, ashbySlug } from "../src/sources/ats/ashby.js";
 import { leverJobId, leverSlug } from "../src/sources/ats/lever.js";
 import { gemJobId, gemJobs, gemSlug } from "../src/sources/ats/gem.js";
+import { fetchSmartRecruitersBoard, smartRecruitersDescription, smartRecruitersJobId, smartRecruitersJobs, smartRecruitersPosting, smartRecruitersSlug } from "../src/sources/ats/smartrecruiters.js";
+import { DISCOVER } from "../src/config.js";
 import { boardsFromJobs } from "../src/sources/companies.js";
 import { atsFromUrl, postingKey } from "../src/jobs/normalize.js";
 import { isEarlyCareerTitle } from "../src/discover.js";
@@ -110,6 +112,70 @@ describe("a Gem board", () => {
     const jobs = gemJobs(JSON.parse(fixture("gem-board.json")), "nominal", "Nominal");
     expect(boardsFromJobs(jobs.slice(0, 1), [])).toEqual([{ ats: "gem", slug: "nominal", company: "Nominal" }]);
     expect(new Set(jobs.map((j) => postingKey(j.url))).size).toBe(3);
+  });
+});
+
+describe("a SmartRecruiters board", () => {
+  const URL_ = "https://jobs.smartrecruiters.com/AJBell1/744000163865709";
+
+  it("knows a SmartRecruiters posting link, its board and its number", () => {
+    expect(atsFromUrl(URL_)).toBe("smartrecruiters");
+    expect(smartRecruitersSlug(`${URL_}-software-development-degree-apprenticeship`)).toBe("AJBell1");
+    expect(smartRecruitersSlug("https://careers.smartrecruiters.com/AJBell1")).toBe("AJBell1");
+    expect(smartRecruitersJobId(`${URL_}-software-development-degree-apprenticeship?oga=true`)).toBe("744000163865709");
+    // SmartRecruiters' own pages are not a company's board.
+    expect(smartRecruitersSlug("https://jobs.smartrecruiters.com/oneclick-ui/company/AJBell1/publication/4ca526a6-9d8f-476a-b8b5-0582162b258d")).toBeNull();
+    expect(smartRecruitersJobId("https://jobs.smartrecruiters.com/AJBell1")).toBeNull();
+  });
+
+  it("reads every posting with its place, date and function, and leaves the description for later", () => {
+    const jobs = smartRecruitersJobs(JSON.parse(fixture("smartrecruiters-board.json")), "AJBell1", "AJ Bell");
+    expect(jobs.map((j) => j.title)).toEqual(["Software Development Degree Apprenticeship", "Cyber Security Degree Apprenticeship", "Project Manager"]);
+    expect(jobs[0]).toMatchObject({ source: "smartrecruiters:AJBell1", company: "AJ Bell", ats: "smartrecruiters", url: URL_, postedAt: "2026-11-26", category: "Information Technology", locations: ["Manchester, United Kingdom"], description: "", descriptionSource: "none" });
+    expect(smartRecruitersJobs({ message: "Company not found" }, "AJBell1", "AJ Bell")).toEqual([]);
+  });
+
+  it("reads a posting's description from its own endpoint, section by section", () => {
+    const text = smartRecruitersDescription(JSON.parse(fixture("smartrecruiters-posting.json")));
+    expect(text).toMatch(/^Job Description\n/);
+    expect(text).toMatch(/2027 apprentices/);
+    expect(text).not.toMatch(/<p>|&#xa0;/);
+    expect(smartRecruitersDescription({})).toBeNull();
+  });
+
+  it("reads one posting from its own endpoint, for a link given to apply", () => {
+    const job = smartRecruitersPosting(JSON.parse(fixture("smartrecruiters-posting.json")), "AJBell1");
+    expect(job).toMatchObject({ company: "AJ Bell", title: "Software Development Degree Apprenticeship", url: URL_, ats: "smartrecruiters", descriptionSource: "api" });
+    expect(job?.description).toMatch(/2027 apprentices/);
+    expect(smartRecruitersPosting({ message: "not found" }, "AJBell1")).toBeNull();
+  });
+
+  it("reads a board page by page, up to its limit", async () => {
+    const one = JSON.parse(fixture("smartrecruiters-board.json")) as { content: unknown[] };
+    const size = DISCOVER.smartRecruitersPageSize;
+    const asked: string[] = [];
+    // A board of many full pages: the reading stops at the limit.
+    const big = async (url: string) => {
+      asked.push(url);
+      return { offset: 0, limit: size, totalFound: size * 50, content: Array.from({ length: size }, (_, i) => ({ ...(one.content[0] as object), id: String(744000000000000 + asked.length * size + i) })) };
+    };
+    const jobs = await fetchSmartRecruitersBoard("AJBell1", "AJ Bell", big);
+    expect(asked.length).toBe(DISCOVER.smartRecruitersMaxPages);
+    expect(asked[1]).toBe(`https://api.smartrecruiters.com/v1/companies/AJBell1/postings?limit=${size}&offset=${size}`);
+    expect(jobs.length).toBe(size * DISCOVER.smartRecruitersMaxPages);
+    // A board that fits on one page is read once.
+    asked.length = 0;
+    expect((await fetchSmartRecruitersBoard("AJBell1", "AJ Bell", async (url) => (asked.push(url), one))).length).toBe(3);
+    expect(asked.length).toBe(1);
+  });
+
+  it("is polled for a company a list links there, and knows a posting however the link spells it", () => {
+    const jobs = smartRecruitersJobs(JSON.parse(fixture("smartrecruiters-board.json")), "AJBell1", "AJ Bell");
+    expect(boardsFromJobs(jobs.slice(0, 1), [])).toEqual([{ ats: "smartrecruiters", slug: "AJBell1", company: "AJ Bell" }]);
+    expect(new Set(jobs.map((j) => postingKey(j.url))).size).toBe(3);
+    // A list links the same posting with the title after its number, or with the company spelled another way.
+    expect(postingKey(`${URL_}-software-development-degree-apprenticeship?oga=true`)).toBe(postingKey(URL_));
+    expect(postingKey("https://jobs.smartrecruiters.com/ajbell1/744000163865709")).toBe("smartrecruiters:744000163865709");
   });
 });
 

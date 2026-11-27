@@ -179,9 +179,9 @@ describe("graduation window and account walls", () => {
     const old = job({ postedAt: new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10) });
     expect(preFilter(old, now, () => false)).toMatch(new RegExp(`posted ${days} days ago`));
     expect(preFilter(old, now, () => false, { authorized: false, citizen: false }, days + 10)).toBeNull();
-    // Jobvite's forms run over several pages, which the runner walks. SmartRecruiters' cannot be read yet.
+    // Jobvite's forms run over several pages, which the runner walks. SmartRecruiters' are read through their shadow roots.
     expect(preFilter(job({ ats: "jobvite" }), now, () => false)).toBeNull();
-    expect(preFilter(job({ ats: "smartrecruiters" }), now, () => false)).toMatch(/cannot be read/);
+    expect(preFilter(job({ ats: "smartrecruiters" }), now, () => false)).toBeNull();
     expect(preFilter(job(), now, () => false)).toBeNull();
   });
 });

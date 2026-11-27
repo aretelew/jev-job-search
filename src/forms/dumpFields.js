@@ -22,17 +22,36 @@
     if (st.opacity === "0" && el.tabIndex === -1) return false;
     return true;
   };
+  // A form drawn inside web components (SmartRecruiters) lives in their shadow roots, where a selector on the
+  // page does not reach. A selector reaches into one with " >>> ": each part after the first is looked for in
+  // the shadow root of the element the part before it found. A selector without it is plain CSS.
+  const q = (s) => { let el = null; let root = document; for (const part of s.split(" >>> ")) { if (!root) return null; el = root.querySelector(part); root = el && el.shadowRoot; } return el; };
+  // Every element that matches, in the page and in every open shadow root in it, in page order.
+  const deepAll = (sel, from = document) => { const out = []; const walk = (r) => { for (const el of r.querySelectorAll("*")) { if (el.matches(sel)) out.push(el); if (el.shadowRoot) walk(el.shadowRoot); } }; walk(from); return out; };
+  // One step up, out of a shadow root to the element that holds it when the top of the root is reached.
+  const up = (el) => el.parentElement || (el.parentNode instanceof ShadowRoot ? el.parentNode.host : null);
+  // An id names an element in its own shadow root, or in one of the roots around it.
+  const byId = (el, id) => { for (let r = el.getRootNode(); r; r = r instanceof ShadowRoot ? r.host.getRootNode() : null) { const n = r.getElementById(id); if (n) return n; } return null; };
+  const plainText = (el) => (el.innerText || el.textContent || "").replace(/SVGs? not supported by this browser\.?/gi, "").replace(/\s+/g, " ").trim();
   // The words of an element. An icon's fallback text ("SVGs not supported by this browser.") is not one of them.
-  const text = (el) => (el ? (el.innerText || el.textContent || "").replace(/SVGs? not supported by this browser\.?/gi, "").replace(/\s+/g, " ").trim() : "");
+  // A part of a web component shows the words the page slots into it (a button's "Next", an option's place name),
+  // which are not its own text: they are read from its slots.
+  const text = (el) => {
+    if (!el) return "";
+    const own = plainText(el);
+    if (own || !(el.getRootNode() instanceof ShadowRoot) || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return own;
+    const slots = el.tagName === "SLOT" ? [el] : [...el.querySelectorAll("slot")];
+    return slots.flatMap((s) => s.assignedNodes({ flatten: true })).map((n) => (n.nodeType === 3 ? n.textContent : n.nodeType === 1 ? plainText(n) : "")).join(" ").replace(/\s+/g, " ").trim();
+  };
   // An attribute value inside a quoted CSS selector: backslashes and quotes escaped.
   const attr = (v) => v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   const cssEscape = (s) => (window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/([^\w-])/g, "\\$1"));
-  const unique = (s) => { try { return document.querySelectorAll(s).length === 1; } catch { return false; } };
+  const uniqueIn = (root, s) => { try { return root.querySelectorAll(s).length === 1; } catch { return false; } };
   // The options of one question that a radio or checkbox is one of. A name ties them together; a form that leaves it
   // off (Gem) draws a question's options in one box, so they are the nameless options of the same kind in the nearest
   // box holding more than one control.
   const optionGroup = (el) => {
-    if (el.name) return [...document.querySelectorAll(`input[type=${el.type}][name="${attr(el.name)}"]`)];
+    if (el.name) return [...el.getRootNode().querySelectorAll(`input[type=${el.type}][name="${attr(el.name)}"]`)];
     for (let cur = el.parentElement, depth = 0; cur && cur !== document.body && depth < 6; cur = cur.parentElement, depth++) {
       const controls = [...cur.querySelectorAll("input:not([type=hidden]), select, textarea")];
       if (controls.length > 1) return controls.every((c) => c.type === el.type && !c.name) ? controls : [el];
@@ -42,22 +61,27 @@
   // Ids a UI library numbers on each render (FabricTextField-349, :r1:, radix-12) can change under us, so they are not used to find a field again.
   // An id that merely ends in digits (question_8595663005, school--0) is the form's own and stays put.
   // A run of twelve or more letters and digits in both cases (nNpgf9k9eygQEJqI) is drawn at random on each render.
-  const RENDER_ID = /^(:r|radix-|headlessui-|mui-|react-aria|downshift-|rc_select_|el-id-|Fabric[A-Za-z]*-?\d|field-\d+$|(?=.*\d)(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9]{12,}$)/;
-  const stableId = (id) => !!id && !RENDER_ID.test(id) && unique("#" + cssEscape(id));
-  const selectorFor = (el) => {
+  // SmartRecruiters' components number their ids the same way (spl-form-element_12, spl-dropzone-file-input-2).
+  const RENDER_ID = /^(:r|radix-|headlessui-|mui-|react-aria|downshift-|rc_select_|el-id-|Fabric[A-Za-z]*-?\d|field-\d+$|spl-[\w-]*\d$|(?=.*\d)(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9]{12,}$)/;
+  // A selector names an element within its own root: the page, or the shadow root it sits in.
+  const selectorIn = (el, root) => {
+    const unique = (s) => uniqueIn(root, s);
+    const stableId = (id) => !!id && !RENDER_ID.test(id) && unique("#" + cssEscape(id));
     const tag = el.tagName.toLowerCase();
     // A radio button is one of a group, and the group is what gets set: its name finds it again whatever its id.
     if (el.type === "radio" && el.name) return `${tag}[name="${attr(el.name)}"]`;
     if (stableId(el.id)) return "#" + cssEscape(el.id);
     // A name the site's own tests use for the control stays put across renders.
-    for (const a of ["data-testid", "data-ui", "data-qa", "data-automation-id"]) {
+    for (const a of ["data-testid", "data-test", "data-sr-id", "data-ui", "data-qa", "data-automation-id"]) {
       const v = el.getAttribute(a);
       if (v && unique(`${tag}[${a}="${attr(v)}"]`)) return `${tag}[${a}="${attr(v)}"]`;
     }
     // Next best: the nearest container the site names, when it holds exactly one control of this kind.
     for (let cur = el.parentElement, depth = 0; cur && depth < 6; cur = cur.parentElement, depth++) {
-      const v = cur.getAttribute("data-testid");
-      if (v && unique(`[data-testid="${attr(v)}"] ${tag}`) && unique(`[data-testid="${attr(v)}"]`)) return `[data-testid="${attr(v)}"] ${tag}`;
+      for (const a of ["data-testid", "data-test"]) {
+        const v = cur.getAttribute(a);
+        if (v && unique(`[${a}="${attr(v)}"] ${tag}`) && unique(`[${a}="${attr(v)}"]`)) return `[${a}="${attr(v)}"] ${tag}`;
+      }
     }
     if (el.name) {
       const s = `${tag}[name="${attr(el.name)}"]`;
@@ -69,18 +93,25 @@
     while (cur && cur !== document.documentElement) {
       if (stableId(cur.id)) { parts.unshift("#" + cssEscape(cur.id)); break; }
       const t = cur.tagName.toLowerCase();
-      const sibs = cur.parentElement ? [...cur.parentElement.children].filter((c) => c.tagName === cur.tagName) : [];
+      // Its parent element, or the shadow root it sits at the top of.
+      const sibs = [...(cur.parentNode ? cur.parentNode.children : [])].filter((c) => c.tagName === cur.tagName);
       parts.unshift(sibs.length > 1 ? `${t}:nth-of-type(${sibs.indexOf(cur) + 1})` : t);
       if (parts.length >= 3 && unique(parts.join(" > "))) break;
       cur = cur.parentElement;
     }
     return parts.join(" > ");
   };
+  // An element in a shadow root is named by its host's selector, then its own within the root.
+  const selectorFor = (el) => {
+    const root = el.getRootNode();
+    const own = selectorIn(el, root);
+    return root instanceof ShadowRoot ? `${selectorFor(root.host)} >>> ${own}` : own;
+  };
   // Placeholder-style labels say nothing about the question. The real question is the text block just above the control.
   const GENERIC = /^(select|select\.\.\.|select an option|select one|please select|choose|choose one|search|search\.\.\.|type to search|start typing\.*|textbox)?$/i;
   const questionFor = (el) => {
     let cur = el;
-    for (let depth = 0; cur && cur !== document.body && depth < 7; depth++, cur = cur.parentElement) {
+    for (let depth = 0; cur && cur !== document.body && depth < 7; depth++, cur = up(cur)) {
       let sib = cur.previousElementSibling;
       while (sib) {
         // The page title is not a question, and anything above it belongs to another part of the page.
@@ -94,7 +125,7 @@
   };
   // What the site itself calls the control, as words: "phone_number-code" reads "phone number code".
   const ownName = (el) => {
-    for (let cur = el, depth = 0; cur && depth < 8; cur = cur.parentElement, depth++) {
+    for (let cur = el, depth = 0; cur && depth < 8; cur = up(cur), depth++) {
       const v = cur.getAttribute("data-testid") || cur.getAttribute("data-ui") || "";
       const words = v.replace(/^(input|select|field)[-_]/i, "").replace(/[-_]+/g, " ").trim();
       if (words && !/^(select|search|input|controller|option|wrapper)\b/i.test(words) && !/^[A-Za-z]{0,3}\d+$/.test(words)) return words;
@@ -107,11 +138,11 @@
     return questionFor(el).replace(/\s*[*✱]\s*$/, "").slice(0, LABEL_MAX) || ownName(el) || label;
   };
   // A file box is usually labelled by its button ("Attach", "Choose file"). Which file it wants is said by the question above it.
-  const FILE_BUTTON = /^(attach|upload|upload file|choose file|select file|browse|replace file|drop or select|drag and drop|svgs? not supported|file[-_ ]?input|file$|no file (selected|chosen)|dropbox|google drive|one ?drive|enter manually|from device|my computer)/i;
+  const FILE_BUTTON = /^(attach|upload|upload file|choose (a )?file|select (a )?file|browse|replace file|drop or select|drag and drop|svgs? not supported|file[-_ ]?input|file$|no file (selected|chosen)|dropbox|google drive|one ?drive|enter manually|from device|my computer)/i;
   // The question above a file box, skipping the box's own buttons ("Attach", "Dropbox", "Enter manually").
   const fileQuestion = (el) => {
     let cur = el;
-    for (let depth = 0; cur && cur !== document.body && depth < 8; depth++, cur = cur.parentElement) {
+    for (let depth = 0; cur && cur !== document.body && depth < 8; depth++, cur = up(cur)) {
       let sib = cur.previousElementSibling;
       while (sib) {
         if (sib.tagName === "H1" || sib.querySelector("h1")) return "";
@@ -131,15 +162,15 @@
   const fieldHeading = (el) => {
     const box = el.closest("fieldset, [class*=field-entry i], [class*=fieldEntry], [data-field-path]");
     if (!box) return null;
-    const h = [...box.querySelectorAll("label, legend, [class*=question-title i]")].find((l) => !l.querySelector("input, select, textarea") && !(l.htmlFor && document.getElementById(l.htmlFor) && document.getElementById(l.htmlFor) !== el && /^(radio|checkbox)$/.test(document.getElementById(l.htmlFor).type || "")));
+    const h = [...box.querySelectorAll("label, legend, [class*=question-title i]")].find((l) => !l.querySelector("input, select, textarea") && !(l.htmlFor && byId(l, l.htmlFor) && byId(l, l.htmlFor) !== el && /^(radio|checkbox)$/.test(byId(l, l.htmlFor).type || "")));
     return h && text(h) ? h : null;
   };
   const labelFor = (el) => {
     const bits = [];
-    if (el.id) document.querySelectorAll(`label[for="${cssEscape(el.id)}"]`).forEach((l) => bits.push(text(l)));
+    if (el.id) el.getRootNode().querySelectorAll(`label[for="${cssEscape(el.id)}"]`).forEach((l) => bits.push(text(l)));
     const al = el.getAttribute("aria-label"); if (al) bits.push(al);
     const by = el.getAttribute("aria-labelledby");
-    if (by) by.split(/\s+/).forEach((id) => { const n = document.getElementById(id); if (n) bits.push(text(n)); });
+    if (by) by.split(/\s+/).forEach((id) => { const n = byId(el, id); if (n) bits.push(text(n)); });
     const wrap = el.closest("label"); if (wrap) bits.push(text(wrap).replace(text(el), ""));
     const isOption = el.type === "checkbox" || el.type === "radio";
     if (isOption && !bits.join("").trim()) {
@@ -166,7 +197,7 @@
   const groupQuestionFor = (el) => {
     const isOptionLabel = (l) => {
       if (l.contains(el) || (el.id && l.htmlFor === el.id)) return true;
-      const target = l.htmlFor ? document.getElementById(l.htmlFor) : l.querySelector("input");
+      const target = l.htmlFor ? byId(l, l.htmlFor) : l.querySelector("input");
       return !!target && (target.type === "checkbox" || target.type === "radio");
     };
     let cur = el.parentElement;
@@ -184,7 +215,7 @@
     const peers = optionGroup(el);
     const sameGroup = (node) => [...node.querySelectorAll("input, select, textarea")].every((i) => peers.includes(i));
     let cur = el;
-    for (let depth = 0; cur && cur !== document.body && depth < 8; depth++, cur = cur.parentElement) {
+    for (let depth = 0; cur && cur !== document.body && depth < 8; depth++, cur = up(cur)) {
       let sib = cur.previousElementSibling;
       while (sib) {
         if (sib.tagName === "H1" || sib.querySelector("h1")) return "";
@@ -200,7 +231,7 @@
   const hintFor = (el) => {
     const by = el.getAttribute("aria-describedby");
     const bits = [];
-    if (by) by.split(/\s+/).forEach((id) => { const n = document.getElementById(id); if (n) bits.push(text(n)); });
+    if (by) by.split(/\s+/).forEach((id) => { const n = byId(el, id); if (n) bits.push(text(n)); });
     // The box the control sits in, not the wrapper drawn right around the input, which holds no words of its own.
     const c = el.closest("fieldset, [class*=field-entry i], [class*=fieldEntry], [data-field-path]") || el.closest("[class*=field i], [class*=question i], [class*=form-group i], div");
     if (c) c.querySelectorAll("p, small, [class*=help i], [class*=hint i], [class*=description i]").forEach((n) => { const t = text(n); if (t && t.length < 400 && !n.querySelector("input, select, textarea")) bits.push(t); });
@@ -218,7 +249,7 @@
         if (h && sib.querySelectorAll("input, select, textarea").length === 0) return text(h).slice(0, 80);
         sib = sib.previousElementSibling;
       }
-      cur = cur.parentElement;
+      cur = up(cur);
     }
     return "";
   };
@@ -265,7 +296,12 @@
     const rows = [...prompt.querySelectorAll('[data-automation-id="selectedItemList"] [role=option], [data-automation-id="selectedItem"]')];
     return rows.filter((r) => !rows.some((o) => o !== r && o.contains(r))).map(text).filter(Boolean).join(", ");
   };
-  const controls = document.querySelectorAll(`input, select, textarea, [role=combobox], [role=listbox], ${MENU_BUTTON}`);
+  // A form drawn entirely inside web components (SmartRecruiters) is read through their shadow roots. That is a page
+  // with no box of its own in sight, and with an email or a file box in a shadow root, as an application has.
+  // On any other page a shadow root holds a widget of the site's (a cookie banner, a chat), not the application.
+  const DEEP = ![...document.querySelectorAll("input:not([type=hidden]), select, textarea")].some(visible) && deepAll("input[type=email], input[type=file]").some((el) => el.getRootNode() instanceof ShadowRoot);
+  const all = (sel) => (DEEP ? deepAll(sel) : [...document.querySelectorAll(sel)]);
+  const controls = all(`input, select, textarea, [role=combobox], [role=listbox], ${MENU_BUTTON}`);
   const containerOf = (el) => el.closest("fieldset, [class*=field i], [class*=question i], [data-field-path], [id^=question], .form-group") || el.parentElement;
   const usedContainers = new Set();
   const dumped = new Set();
@@ -283,7 +319,7 @@
     // The list of what is picked is part of the box, not a question of its own.
     if (prompt && !isControl) return;
     // The list a combobox opens is that combobox's, not a question of its own.
-    if (!isControl && el.id && document.querySelector(`[aria-controls="${attr(el.id)}"], [aria-owns="${attr(el.id)}"]`)) return;
+    if (!isControl && el.id && el.getRootNode().querySelector(`[aria-controls="${attr(el.id)}"], [aria-owns="${attr(el.id)}"]`)) return;
     // Custom widgets (react-select wrappers, live regions) are reported once, through the real input in the same question.
     if (!isControl) {
       if (el.querySelector("input, select, textarea")) return;
@@ -293,7 +329,7 @@
     }
     if (isControl && type !== "radio") usedContainers.add(containerOf(el));
     // A radio or a checkbox is often drawn by its label, with the real box kept out of sight behind it.
-    const drawnByLabel = (type === "radio" || type === "checkbox") && !visible(el) && [el.closest("label"), el.id && document.querySelector(`label[for="${cssEscape(el.id)}"]`), type === "checkbox" && el.closest("[role=checkbox]")].some((l) => l && visible(l));
+    const drawnByLabel = (type === "radio" || type === "checkbox") && !visible(el) && [el.closest("label"), el.id && el.getRootNode().querySelector(`label[for="${cssEscape(el.id)}"]`), type === "checkbox" && el.closest("[role=checkbox]")].some((l) => l && visible(l));
     // A select2 list keeps the real <select> out of sight and draws its own box beside it.
     const drawnBySelect2 = tag === "select" && /select2-hidden/.test(el.className) && !!el.nextElementSibling && visible(el.nextElementSibling);
     if (!visible(el) && type !== "file" && !drawnByLabel && !drawnBySelect2) return;
@@ -345,7 +381,7 @@
       const shownNow = /^[-–—\s]*(select|select\.\.\.|select an option|select one|choose|search|please select)?[-–—\s]*$/i.test(own) ? "" : own;
       let named = "";
       for (let cur = el, depth = 0; cur && depth < 5 && !named; cur = cur.parentElement, depth++) {
-        if (cur.id) named = [...document.querySelectorAll(`label[for="${cssEscape(cur.id)}"]`)].map(text).join(" ");
+        if (cur.id) named = [...cur.getRootNode().querySelectorAll(`label[for="${cssEscape(cur.id)}"]`)].map(text).join(" ");
       }
       const al = (el.getAttribute("aria-label") || "").trim();
       if (!named && al) named = own && al.endsWith(own) ? al.slice(0, -own.length).trim() : al;
@@ -364,12 +400,12 @@
       if (group.some((r) => seenRadio.has(r))) { i--; return; }
       group.forEach((r) => {
         seenRadio.add(r);
-        const l = (r.id && document.querySelector(`label[for="${cssEscape(r.id)}"]`)) || r.closest("label");
+        const l = (r.id && r.getRootNode().querySelector(`label[for="${cssEscape(r.id)}"]`)) || r.closest("label");
         f.options.push({ value: r.value, label: text(l) || r.value });
         if (r.checked) f.value = r.value;
       });
       const fs = el.closest("fieldset, [role=radiogroup]");
-      const named = fs && fs.getAttribute("aria-labelledby") ? fs.getAttribute("aria-labelledby").split(/\s+/).map((id) => text(document.getElementById(id))).filter(Boolean).join(" ") : "";
+      const named = fs && fs.getAttribute("aria-labelledby") ? fs.getAttribute("aria-labelledby").split(/\s+/).map((id) => text(byId(fs, id))).filter(Boolean).join(" ") : "";
       if (fs && fs.querySelector("legend")) f.label = text(fs.querySelector("legend")) || f.label;
       else if (named) f.label = named.slice(0, LABEL_MAX);
       else if (!f.label || f.options.some((o) => o.label === f.label)) {
@@ -395,8 +431,8 @@
     } else if (kind === "combobox") {
       f.value = (prompt ? pickedIn(prompt) : el.value) || f.value || "";
       const listId = el.getAttribute("aria-controls") || el.getAttribute("aria-owns");
-      const list = listId ? document.getElementById(listId) : null;
-      if (list) list.querySelectorAll("[role=option]").forEach((o) => f.options.push({ value: text(o), label: text(o) }));
+      const list = listId ? byId(el, listId) : null;
+      if (list) deepAll("[role=option]", list).forEach((o) => f.options.push({ value: text(o), label: text(o) }));
     } else {
       f.value = el.value || f.value || "";
     }
@@ -415,14 +451,15 @@
   // put when a question appears above it. A path of positions would then point at another row.
   const groupSelectorFor = (c) => {
     const tag = c.tagName.toLowerCase();
+    const root = c.getRootNode();
     for (const inner of c.querySelectorAll(":scope > input[name]")) {
       const s = `${tag}:has(> input[name="${attr(inner.name)}"])`;
-      if (unique(s)) return s;
+      if (uniqueIn(root, s)) return root instanceof ShadowRoot ? `${selectorFor(root.host)} >>> ${s}` : s;
     }
     return selectorFor(c);
   };
   // Button groups: a labelled field whose choices are plain <button>s (Ashby's Yes/No, some custom forms).
-  const groupContainers = document.querySelectorAll("[class*=field-entry i], [class*=fieldEntry], [class*=question i], fieldset, [role=radiogroup], [role=group]");
+  const groupContainers = all("[class*=field-entry i], [class*=fieldEntry], [class*=question i], fieldset, [role=radiogroup], [role=group]");
   const seenGroup = new Set();
   groupContainers.forEach((c) => {
     // A radiogroup drawn with role=radio rows keeps its real inputs invisible; it is read through the rows.
@@ -472,24 +509,29 @@
   }
 
   // Some careers sites embed the real form in an iframe (Greenhouse, Lever). Report those so the caller can navigate into one.
-  out.hasPassword = [...document.querySelectorAll("input[type=password]")].some(visible);
-  // Told by the frame's own host. A share widget that merely names a job board in its address is not a form.
+  // Looked for in shadow roots too, whatever the form is drawn in: a sign-in box anywhere makes this a sign-in page.
+  out.hasPassword = deepAll("input[type=password]").some(visible);
   const hostOf = (src) => { try { return new URL(src).hostname; } catch { return ""; } };
+  // A page that is only a bot check, drawn in a frame from the service that runs it (SmartRecruiters' DataDome,
+  // Cloudflare's challenge). The form is behind it, and passing it is the person's.
+  out.botCheck = !fields.length && [...document.querySelectorAll("iframe[src]")].some((f) => /(^|\.)captcha-delivery\.com$|^challenges\.cloudflare\.com$/i.test(hostOf(f.src)));
+  // Told by the frame's own host. A share widget that merely names a job board in its address is not a form.
   out.frames = [...document.querySelectorAll("iframe[src]")].map((f) => f.src).filter((src) => /greenhouse|lever\.co|ashbyhq|workday|smartrecruiters|jobvite|bamboohr|rippling|icims/i.test(hostOf(src)));
   // A take-home assignment the page asks for, with its link. The application still goes; the assignment is listed for the person.
   const TAKE_HOME = /take[- ]?home|coding (challenge|assessment|exercise)|technical assessment|complete the assignment/i;
   const URL_IN_TEXT = /https?:\/\/[^\s"')<>]+/;
-  out.takeHome = [...document.querySelectorAll("p, li, div, label, legend, span")]
+  out.takeHome = all("p, li, div, label, legend, span")
     .filter((n) => n.children.length < 8 && TAKE_HOME.test(text(n)) && text(n).length < 600 && (n.querySelector("a[href^='http']") || URL_IN_TEXT.test(text(n))))
     .filter((n, i, all) => !all.some((o) => o !== n && n.contains(o)))
     .slice(0, 3)
     .map((n) => ({ text: text(n).slice(0, 300), url: (n.querySelector("a[href^='http']") || {}).href || (URL_IN_TEXT.exec(text(n)) || [""])[0] }));
-  const form = fields.length && document.querySelector(fields[0].selector)?.closest("form");
+  const form = fields.length && q(fields[0].selector)?.closest("form");
   const headings = [...(form || document).querySelectorAll("h1, h2, h3, p")].slice(0, 8).map(text).filter(Boolean);
   out.context = headings.join(" | ").slice(0, 800);
+  const SUBMIT_LIKE = "button, input[type=submit], [role=button], a[class*=submit i], a[class*=btn i]";
   const SUBMIT_WORD = /submit|apply|send|continue|next|review|finish|soumettre|postuler|envoyer/i;
   // JazzHR draws its Submit as a styled link.
-  const submitLike = (root) => [...root.querySelectorAll("button, input[type=submit], [role=button], a[class*=submit i], a[class*=btn i]")].filter((b) => SUBMIT_WORD.test((text(b) || b.value || b.getAttribute("aria-label") || "").trim()) && visible(b));
+  const submitLike = (root) => (root === document ? all(SUBMIT_LIKE) : [...root.querySelectorAll(SUBMIT_LIKE)]).filter((b) => SUBMIT_WORD.test((text(b) || b.value || b.getAttribute("aria-label") || "").trim()) && visible(b));
   // The button may sit outside the form element (BambooHR draws it in a footer of its own), so the page is searched when the form has none.
   const buttons = form && submitLike(form).length ? submitLike(form) : submitLike(document);
   buttons.forEach((b) => {

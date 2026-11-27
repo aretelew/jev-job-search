@@ -1,6 +1,6 @@
 /**
  * Fills job.description. Uses the ATS public API when the URL points at
- * Greenhouse, Lever or Ashby (clean text, no rate limits) and falls back to
+ * Greenhouse, Lever, Ashby, Gem or SmartRecruiters (clean text, no rate limits) and falls back to
  * fetching the page and stripping it to text. Descriptions are capped so a
  * rating request stays well inside JEV's context window.
  */
@@ -9,6 +9,7 @@ import { fetchAshbyJob, ashbyJobId, ashbySlug } from "../sources/ats/ashby.js";
 import { fetchGemJob, gemJobId, gemSlug } from "../sources/ats/gem.js";
 import { fetchGreenhouseJob, greenhouseJobId, greenhouseSlug } from "../sources/ats/greenhouse.js";
 import { fetchLeverJob, leverJobId, leverSlug } from "../sources/ats/lever.js";
+import { fetchSmartRecruitersJob, smartRecruitersJobId, smartRecruitersSlug } from "../sources/ats/smartrecruiters.js";
 import { fetchWorkdayJob } from "../sources/ats/workday.js";
 import { getText } from "../util/http.js";
 import { htmlToText, truncate } from "../util/text.js";
@@ -47,6 +48,13 @@ export async function describe(job: Job): Promise<Job> {
       const id = gemJobId(job.url);
       if (slug && id) {
         text = await fetchGemJob(slug, id);
+        source = "api";
+      }
+    } else if (job.ats === "smartrecruiters") {
+      const slug = smartRecruitersSlug(job.url);
+      const id = smartRecruitersJobId(job.url);
+      if (slug && id) {
+        text = await fetchSmartRecruitersJob(slug, id);
         source = "api";
       }
     }

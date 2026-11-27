@@ -61,6 +61,10 @@ export function postingKey(raw: string): string {
   // Workable links one job as /j/CODE and as /company/j/CODE.
   const workable = hostIs(host, "workable.com") ? /\/j\/([A-Z0-9]{6,})/i.exec(url)?.[1] : undefined;
   if (workable) return `workable:${workable.toUpperCase()}`;
+  // SmartRecruiters links one posting under its number, with the company spelled as the board or the list
+  // spells it (AboutYou, ABOUTYOUGmbH) and the title after it or not.
+  const smartRecruiters = hostIs(host, "smartrecruiters.com") ? /^\/[^/]+\/(\d{6,})(?:-|$)/.exec(new URL(url).pathname)?.[1] : undefined;
+  if (smartRecruiters) return `smartrecruiters:${smartRecruiters}`;
   const requisition = workdayRequisition(url);
   if (requisition) return `workday:${requisition}`;
   const gh = /[?&](?:gh_jid|token)=(\d+)/.exec(url)?.[1] ?? (hostIs(host, "greenhouse.io") ? /\/jobs\/(\d+)/.exec(url)?.[1] : undefined);

@@ -18,10 +18,12 @@ Run every command from the repo root with `npx jev <command>`.
 
 ## One posting the user found themselves
 
-`apply <link> --submit` takes a Greenhouse, Lever, Ashby or Gem posting link
-in place of an id: the posting is read from the board, rated, queued at the
-top and filled like any other. For a link on another board, tell the user
-the tool reads those four directly and that `discover` picks up the rest.
+`apply <link> --submit` takes a Greenhouse, Lever, Ashby, Gem or
+SmartRecruiters posting link in place of an id: the posting is read from the
+board, rated, queued at the top and filled like any other. For a link on
+another board, tell the user the tool reads those five directly and that
+`discover` picks up the rest. SmartRecruiters forms are new: suggest `--dry`
+on the first one.
 
 ## Before the loop
 

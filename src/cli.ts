@@ -166,7 +166,7 @@ const documentsFromOptions = (o: { tailor?: boolean; cover?: boolean; plain?: bo
 
 program
   .command("apply [ids...]")
-  .description("Fill each form, answer what is open, walk its pages, check every answer, and with --submit send every form that is ready. An id can also be a posting's link on Greenhouse, Lever, Ashby, Gem or Workday")
+  .description("Fill each form, answer what is open, walk its pages, check every answer, and with --submit send every form that is ready. An id can also be a posting's link on Greenhouse, Lever, Ashby, Gem, SmartRecruiters or Workday")
   .option("--count <n>", "with no ids: take this many jobs from the top of the queue", int, 1)
   .option("--submit", "send each form the moment it is ready. Without it, ready forms are left open in the window")
   .option("--dry", "a rehearsal: record nothing, send nothing, close the tabs")

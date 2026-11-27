@@ -40,9 +40,9 @@ describe("short links from job lists", () => {
   });
 
   it("shows the real job board, so a board the tool cannot fill is set aside before it is queued", async () => {
-    const { jobs } = await resolveShortLinks([job(`${SHORT}/1DM?s=y`)], async () => "https://jobs.smartrecruiters.com/acme/3743990016985486");
-    expect(jobs[0]?.ats).toBe("smartrecruiters");
-    expect(preFilter(jobs[0] as Job, new Date("2026-11-25T12:00:00Z"), () => false)).toMatch(/cannot be read/);
+    const { jobs } = await resolveShortLinks([job(`${SHORT}/1DM?s=y`)], async () => "https://careers-acme.icims.com/jobs/12345/software-intern/job");
+    expect(jobs[0]?.ats).toBe("icims");
+    expect(preFilter(jobs[0] as Job, new Date("2026-11-25T12:00:00Z"), () => false)).toMatch(/needs an account/);
   });
 
   it("looks each link up once", async () => {

@@ -27,7 +27,7 @@ new.
 ## Descriptions
 
 The rating needs the posting text. `src/jobs/describe.ts` gets it from the
-ATS API when the URL is Greenhouse, Lever, Ashby or Gem (clean text, cached six
+ATS API when the URL is Greenhouse, Lever, Ashby, Gem or SmartRecruiters (clean text, cached six
 hours) and otherwise fetches the page and strips it to text. Pages that
 render only in JavaScript (some Tesla, Rubrik, Epic careers pages) come
 back empty and are rated from the title and company alone.
@@ -47,7 +47,6 @@ postings found were on Workday, across 290 employers.
 |---|---|---|
 | LinkedIn Jobs, Indeed, Glassdoor | They need a sign-in or block automated reading. The tool does not sign in anywhere | Not planned |
 | iCIMS, Taleo, Oracle, SuccessFactors, Amazon Jobs | Every one needs an account | An adapter in `src/accounts/`, like the one for Workday. Until then these jobs are skipped |
-| SmartRecruiters | Its form is drawn inside components the page scripts cannot read yet | Reading through shadow roots in `dumpFields.js` and `fillFields.js` |
 | German-language boards | English only for version one | A `lang` field on `Job` and a German `voice.md` |
 | Company careers pages with no public API | No structured feed | Per-company HTML parsers; the board APIs cover most of the early-career market |
 

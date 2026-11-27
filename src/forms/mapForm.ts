@@ -845,7 +845,8 @@ export const COVER_LABEL = /cover\s*letter|covering letter|letter of (motivation
 
 export function fileBoxWants(f: Pick<DumpedField, "label" | "name" | "hint" | "selector">): "resume" | "cover" | "transcript" | "graduate_transcript" | "autofill" | "other" | "unnamed" {
   const text = `${f.label} ${f.name} ${f.hint} ${f.selector}`;
-  if (/autofill|auto-fill|parse|prefill/i.test(text)) return "autofill";
+  // SmartRecruiters asks for a file "to autocomplete your application": a resume read to fill the form, not the application's resume.
+  if (/autofill|auto-fill|autocomplete (your|the) application|parse|prefill/i.test(text)) return "autofill";
   if (COVER_LABEL.test(text)) return "cover";
   if (/transcript/i.test(text)) return /\b(graduate|master|phd|doctoral)\b/i.test(text) && !/undergraduate/i.test(text) ? "graduate_transcript" : "transcript";
   if (/resume|résumé|\bcv\b|curriculum/i.test(text)) return "resume";

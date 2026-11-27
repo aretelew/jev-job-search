@@ -212,6 +212,8 @@ export const isClean = (r: Open) => r.state === "filled" && !r.drafts.length && 
 export const isReady = (r: Open & Pick<FillReport, "hasNext">) => isClean(r) && !r.hasNext;
 
 export const SIGN_IN_REASON = "the site wants a sign-in or an account";
+/** A bot check that stands before the form (SmartRecruiters' DataDome). The tool never passes one: the person applies by hand, or the job runs again another day. */
+export const BOT_CHECK_REASON = "the site asks you to confirm you are not a robot before it shows the form. Open the link and apply by hand, or run the job again another day";
 
 const buttons = (submitSelectors: string[]) => submitSelectors.map((s) => ({ selector: s.split("  /*")[0] ?? s, text: /\/\*\s*(.*?)\s*\*\//.exec(s)?.[1] ?? "" }));
 

@@ -4,7 +4,7 @@
  * a form that asks for a signature, and a question the profile cannot answer
  * are not worked around. The job is set aside for them with the reason.
  */
-import { SIGN_IN_REASON, type FillReport } from "../browser/report.js";
+import { BOT_CHECK_REASON, SIGN_IN_REASON, type FillReport } from "../browser/report.js";
 import type { QueueEntry, WaitingFor } from "../jobs/queue.js";
 
 /** Why a job is submission_unknown when nothing more is known: the words the record and the live panel share. */
@@ -40,6 +40,8 @@ export function outcomeOf(r: FillReport, maxPages: number): Outcome {
     // A sign-in on a board the tool knows: the job waits for what the sign-in said, and the site is not written off.
     if (r.auth) return { action: r.auth.status, reason: r.auth.status === "queued" ? null : reason, rememberSite: false, waitingFor: r.auth.waitingFor };
     if (reason === SIGN_IN_REASON || /login_required/.test(reason)) return { action: "login_required", reason: SIGN_IN_REASON, rememberSite: true };
+    // A robot check before the form is a human check like one after it: the job is the person's, and the board is not asked again today.
+    if (reason === BOT_CHECK_REASON) return { action: "blocked", reason, rememberSite: false, waitingFor: "robot_check" };
     // A posting that has closed is not something the person can do by hand either.
     if (/page looks like: closed/.test(reason)) return { action: "skipped", reason: "the posting has closed", rememberSite: false };
     return { action: "blocked", reason, rememberSite: /page looks like: job_description/.test(reason) };

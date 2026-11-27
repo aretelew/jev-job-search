@@ -400,7 +400,8 @@ export class Page {
     // own document can lag behind after the tab has moved from a careers page to the board's form.
     const root = await this.send<{ result: { objectId: string } }>("Runtime.evaluate", { expression: "globalThis" });
     const found = await this.send<{ result: { objectId?: string; subtype?: string } }>("Runtime.callFunctionOn", {
-      functionDeclaration: "function (s) { return document.querySelector(s); }",
+      // A selector with " >>> " reaches into shadow roots, as dumpFields.js writes it (SmartRecruiters' file boxes are in one).
+      functionDeclaration: 'function (s) { let el = null; let root = document; for (const part of s.split(" >>> ")) { if (!root) return null; el = root.querySelector(part); root = el && el.shadowRoot; } return el; }',
       objectId: root.result.objectId,
       arguments: [{ value: selector }],
       returnByValue: false,

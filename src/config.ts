@@ -193,8 +193,10 @@ export const DISCOVER = {
   shortLinkGapMs: 200,
   /** The most redirects followed for one link, so a shortener that points at another still resolves. */
   shortLinkMaxHops: 3,
-  /** Job boards whose forms the page scripts cannot read yet. Their jobs are skipped with that reason. */
-  unreadableAts: ["smartrecruiters"],
+  /** Postings read in one request from a SmartRecruiters board. 100 is the most its API gives. */
+  smartRecruitersPageSize: 100,
+  /** Pages read from one SmartRecruiters board, newest first. A large employer lists thousands; the newest are what is open now. */
+  smartRecruitersMaxPages: 5,
   /** Sources that are read from GitHub. Each entry names the raw file and its parser. */
   sources: {
     simplifyInternships:

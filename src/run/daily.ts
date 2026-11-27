@@ -223,12 +223,13 @@ export async function dailyRun(policy: Policy, o: { target?: number; maxAttempts
       gap.set(board, drawGap());
     } else if (out.status === "awaiting_user_action" || out.status === "awaiting_email_verification") {
       summary.waiting.push({ ...line(next), why });
-      if (HUMAN.includes(out.waitingFor)) {
-        challenged.add(board);
-        pause(board, "it asked for a human check");
-      }
     } else if (!o.dry || !out.ready) {
       summary.leftForYou.push({ ...line(next), status: out.status, why });
+    }
+    // A board that asked for a human check, on its form or before it, is not asked again today.
+    if (HUMAN.includes(out.waitingFor)) {
+      challenged.add(board);
+      pause(board, "it asked for a human check");
     }
     // A board that answers "too many requests" is telling the run to stop.
     const said = `${why} ${(out.report?.failed ?? []).map((f) => f.why).join(" ")}`;

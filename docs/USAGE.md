@@ -98,7 +98,7 @@ or `--status queued` to try again.
 | [negarprh/Canadian-Tech-Internships-2027](https://github.com/negarprh/Canadian-Tech-Internships-2027) | Internships in Canada. |
 | [vanshb03/Summer2027-Internships](https://github.com/vanshb03/Summer2027-Internships) | Internships in the United States and Canada. |
 | [michelleokolie/canada-tech-internships-summer-2027](https://github.com/michelleokolie/canada-tech-internships-summer-2027) | Internships in Canada. |
-| Company job boards | The tool asks Greenhouse, Lever, Ashby and Gem directly for the jobs of every company the lists name, and of 73 more companies. This finds jobs a day or two before the lists do. |
+| Company job boards | The tool asks Greenhouse, Lever, Ashby, Gem and SmartRecruiters directly for the jobs of every company the lists name, and of 73 more companies. This finds jobs a day or two before the lists do. |
 | Your own list | Put a CSV file with a company column and a link column in `data/imports/`. |
 
 On one search, these sources gave 4,748 different jobs. The tool counts a
@@ -138,7 +138,7 @@ date. It ranks the job lower and leaves the choice to you.
 | Rippling, Workable | Works. Tested on a few forms each. |
 | BambooHR | Works. Its "confirm you are not a robot" check after Submit is yours: that form stays open for you, and the run goes on. |
 | Jobvite, Tesla, and other forms that run over several pages | Works. The tool fills a page, checks it, clicks the form's own Next, and fills the next page, up to 8 pages. |
-| SmartRecruiters | Not supported yet. The tool cannot read its form. It skips these jobs. |
+| SmartRecruiters | New. The tool reads and fills its form, which is drawn inside web components. Tested on a scripted copy of the form and read on live ones, but not yet sent end to end, so rehearse first. Its form page sometimes shows a robot check (DataDome) before the form: that job goes on your by-hand list with that reason, and the daily run leaves SmartRecruiters alone until tomorrow. A large employer lists thousands of jobs there; the tool reads its newest 500. |
 | Workday | Off until you allow it with `/accounts`. Then the tool signs in with your account at that employer, or makes one if you said it may, and fills the form page by page. The sign-in is tested against scripted pages only, and Workday's own application pages have not been seen, so rehearse first. See [ACCOUNTS.md](ACCOUNTS.md). |
 | iCIMS, Taleo, Oracle, SuccessFactors, Amazon, LinkedIn, and any other site that wants a sign-in | The tool does not sign in there. It skips these jobs. If it meets a sign-in page during a run, it closes the page, puts the job on your by-hand list, and skips that site from then on. |
 
@@ -384,7 +384,6 @@ None of this is built yet.
   surface open applications that went quiet with a drafted follow-up.
 - **`/interview`**: a prep pack for a scheduled interview from the exact
   posting and the documents they read, and a mock interview in chat.
-- **SmartRecruiters.** Its form is drawn in a way the tool cannot read yet.
 - **Windows and Linux.** The tool is tested only on a Mac.
 
 - **More boards with accounts.** Workday is the first; each further board

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockedReport, SIGN_IN_REASON, type FillReport } from "../src/browser/report.js";
+import { blockedReport, BOT_CHECK_REASON, SIGN_IN_REASON, type FillReport } from "../src/browser/report.js";
 import { notReady, outcomeOf } from "../src/run/outcome.js";
 
 const job = { id: "j1", company: "Acme", title: "SWE Intern", ats: "greenhouse", url: "https://careers.acme.com/1" };
@@ -20,6 +20,9 @@ describe("what becomes of a job", () => {
     expect(stopped({ status: "login_required", waitingFor: "login" }, "no password is stored")).toMatchObject({ action: "login_required", reason: "no password is stored", rememberSite: false });
     // The day's limit of new accounts: nothing is wrong, the job goes back to the queue with no reason on it.
     expect(stopped({ status: "queued", waitingFor: null }, "today's limit of 3 new accounts is reached")).toEqual({ action: "queued", reason: null, rememberSite: false, waitingFor: null });
+  });
+  it("is left for the person, waiting on a robot check, when one stands before the form", () => {
+    expect(outcomeOf(blockedReport(job, BOT_CHECK_REASON), 8)).toEqual({ action: "blocked", reason: BOT_CHECK_REASON, rememberSite: false, waitingFor: "robot_check" });
   });
   it("is skipped, not left for the person, when the posting has closed", () => {
     expect(outcomeOf(blockedReport(job, "no form found, page looks like: closed"), 8)).toEqual({ action: "skipped", reason: "the posting has closed", rememberSite: false });

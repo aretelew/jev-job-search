@@ -1,5 +1,5 @@
 /**
- * Company boards worth polling directly. Seeded from every Greenhouse, Lever, Ashby and Gem URL the
+ * Company boards worth polling directly. Seeded from every Greenhouse, Lever, Ashby, Gem and SmartRecruiters URL the
  * list sources mention (those companies are hiring early-career now), plus a hand-kept list of
  * boards that post Canadian and remote early-career software roles. Polling the board catches
  * postings the lists have not picked up yet, which is where the freshest ones are.
@@ -8,6 +8,7 @@ import { ashbySlug, fetchAshbyBoard } from "./ats/ashby.js";
 import { fetchGemBoard, gemSlug } from "./ats/gem.js";
 import { fetchGreenhouseBoard, greenhouseSlug } from "./ats/greenhouse.js";
 import { fetchLeverBoard, leverSlug } from "./ats/lever.js";
+import { fetchSmartRecruitersBoard, smartRecruitersSlug } from "./ats/smartrecruiters.js";
 import type { Job } from "../jobs/normalize.js";
 
 /** Each board the tool can read whole: how a posting link names its board, and how the board is read. */
@@ -16,6 +17,7 @@ const READERS = {
   lever: { slug: leverSlug, read: fetchLeverBoard },
   ashby: { slug: ashbySlug, read: fetchAshbyBoard },
   gem: { slug: gemSlug, read: fetchGemBoard },
+  smartrecruiters: { slug: smartRecruitersSlug, read: fetchSmartRecruitersBoard },
 } satisfies Record<string, { slug: (url: string) => string | null; read: (slug: string, company: string) => Promise<Job[]> }>;
 
 export type Board = { ats: keyof typeof READERS; slug: string; company: string };

@@ -17,7 +17,7 @@ cache time, and a test on a captured fixture that holds no personal data.
 1. **Ask what the user wants read**: a link to the board or list, and
    whether it is a company board (one employer) or a list (many).
 2. **Inspect it.** Use WebFetch on the link. Find how the postings are
-   served: a JSON API (Greenhouse, Lever, Ashby and Gem already have one in
+   served: a JSON API (Greenhouse, Lever, Ashby, Gem and SmartRecruiters already have one in
    `src/sources/ats/`), a GitHub README table (`src/sources/githubReadme.ts`
    already parses the common shape), a CSV, or HTML. Check `robots.txt` and
    the site's terms; a board that wants a sign-in or forbids automated

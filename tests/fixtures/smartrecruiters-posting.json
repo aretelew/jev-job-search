@@ -1,0 +1,76 @@
+{
+  "id": "744000163865709",
+  "name": "Software Development Degree Apprenticeship",
+  "uuid": "4ca526a6-9d8f-476a-b8b5-0582162b258d",
+  "jobId": "62caf4a3-b61d-47d7-94a8-635d0f6cf04b",
+  "jobAdId": "b220cc12-79c8-4016-9c61-9e65edd0b161",
+  "defaultJobAd": true,
+  "refNumber": "REF2947Q",
+  "company": {
+    "name": "AJ Bell",
+    "identifier": "AJBell1"
+  },
+  "location": {
+    "city": "Manchester",
+    "country": "gb",
+    "remote": false,
+    "hybrid": true,
+    "fullLocation": "Manchester, , United Kingdom"
+  },
+  "releasedDate": "2026-11-26T12:36:24.741Z",
+  "postingUrl": "https://jobs.smartrecruiters.com/AJBell1/744000163865709-software-development-degree-apprenticeship",
+  "applyUrl": "https://jobs.smartrecruiters.com/AJBell1/744000163865709-software-development-degree-apprenticeship?oga=true",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": ""
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>We're now looking to kick-start recruitment for our Digital and Technology Solutions Degree apprenticeship programme starting in September 2027. This is a great opportunity to gain business exposure while you work in one of AJ Bell’s software development teams.&#xa0;&#xa0;&#xa0;</p><p>Our Digital and Technology Solutions Degree Apprenticeship programme is a great opportunity for you to gain practical experience in our Technology department whilst studying. At the same time as working and learning on the job you will study for four years for a BSc in Digital and Technology Solutions with our academic provider, Manchester Metropolitan University. You will spend one day per week during term time undertaking classroom learning at University; the rest of your time will be spent working at AJ Bell, gaining valuable skills, earning a competitive salary with your fees paid, plus much more!&#xa0;</p><p>The software development teams at AJ Bell create and maintain the software that powers our investment platform. They design, build, test, and update the systems and applications that our customers and staff use. This includes everything from the website and mobile apps to the backend systems that handle transactions and data. They work to ensure the software is secure, reliable, and easy to use.&#xa0;</p><p><strong>Our 2027 apprentices will work in either our Ops and Reg development team or our Process Automation team.&#xa0;&#xa0;</strong></p>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": ""
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": ""
+      },
+      "videos": {
+        "title": "Videos To Watch",
+        "urls": [
+          "https://vimeo.com/1231981569"
+        ]
+      }
+    }
+  },
+  "active": true,
+  "visibility": "PUBLIC",
+  "industry": {
+    "id": "financial_services",
+    "label": "Financial Services"
+  },
+  "function": {
+    "id": "information_technology",
+    "label": "Information Technology"
+  },
+  "department": {
+    "id": 1476712,
+    "label": "Learning and Development"
+  },
+  "experienceLevel": {
+    "id": "entry_level",
+    "label": "Entry Level"
+  },
+  "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+  },
+  "language": {
+    "code": "en",
+    "label": "English",
+    "labelNative": "English (US)"
+  }
+}

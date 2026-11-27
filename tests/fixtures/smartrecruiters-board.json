@@ -1,0 +1,150 @@
+{
+  "offset": 0,
+  "limit": 100,
+  "totalFound": 3,
+  "content": [
+    {
+      "id": "744000163865709",
+      "name": "Software Development Degree Apprenticeship",
+      "uuid": "4ca526a6-9d8f-476a-b8b5-0582162b258d",
+      "jobAdId": "b220cc12-79c8-4016-9c61-9e65edd0b161",
+      "defaultJobAd": true,
+      "refNumber": "REF2947Q",
+      "company": {
+        "identifier": "AJBell1",
+        "name": "AJ Bell"
+      },
+      "releasedDate": "2026-11-26T12:36:24.741Z",
+      "location": {
+        "city": "Manchester",
+        "country": "gb",
+        "remote": false,
+        "hybrid": true,
+        "fullLocation": "Manchester, , United Kingdom"
+      },
+      "industry": {
+        "id": "financial_services",
+        "label": "Financial Services"
+      },
+      "department": {
+        "id": "1476712",
+        "label": "Learning and Development"
+      },
+      "function": {
+        "id": "information_technology",
+        "label": "Information Technology"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "entry_level",
+        "label": "Entry Level"
+      },
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AJBell1/postings/744000163865709",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    },
+    {
+      "id": "744000163865839",
+      "name": "Cyber Security Degree Apprenticeship",
+      "uuid": "54cadb05-569d-4ea0-b01d-a1d59c4e1ca8",
+      "jobAdId": "27d5516a-b0eb-4403-a312-3f0a9276d8a3",
+      "defaultJobAd": true,
+      "refNumber": "REF2945D",
+      "company": {
+        "identifier": "AJBell1",
+        "name": "AJ Bell"
+      },
+      "releasedDate": "2026-11-26T12:36:53.143Z",
+      "location": {
+        "city": "Manchester",
+        "country": "gb",
+        "remote": false,
+        "hybrid": true,
+        "fullLocation": "Manchester, , United Kingdom"
+      },
+      "industry": {
+        "id": "financial_services",
+        "label": "Financial Services"
+      },
+      "department": {
+        "id": "1476712",
+        "label": "Learning and Development"
+      },
+      "function": {
+        "id": "information_technology",
+        "label": "Information Technology"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "entry_level",
+        "label": "Entry Level"
+      },
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AJBell1/postings/744000163865839",
+      "language": {
+        "code": "en-GB",
+        "label": "English (UK)",
+        "labelNative": "English (UK)"
+      }
+    },
+    {
+      "id": "744000163659002",
+      "name": "Project Manager",
+      "uuid": "5627a534-3525-43f5-875f-959709466732",
+      "jobAdId": "3fc9e46c-c465-4bb4-a636-e6143a7de69a",
+      "defaultJobAd": true,
+      "refNumber": "REF2942U",
+      "company": {
+        "identifier": "AJBell1",
+        "name": "AJ Bell"
+      },
+      "releasedDate": "2026-11-25T11:11:10.007Z",
+      "location": {
+        "city": "Manchester",
+        "region": "England",
+        "country": "gb",
+        "remote": false,
+        "hybrid": true,
+        "hybridDescription": "50% office based",
+        "fullLocation": "Manchester, England, United Kingdom"
+      },
+      "industry": {
+        "id": "financial_services",
+        "label": "Financial Services"
+      },
+      "department": {
+        "id": "1476746",
+        "label": "AJ Bell Investcentre Marketing"
+      },
+      "function": {
+        "id": "project_management",
+        "label": "Project Management"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AJBell1/postings/744000163659002",
+      "language": {
+        "code": "en-GB",
+        "label": "English (UK)",
+        "labelNative": "English (UK)"
+      }
+    }
+  ]
+}

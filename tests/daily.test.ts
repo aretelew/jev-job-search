@@ -1,3 +1,4 @@
+import { BOT_CHECK_REASON } from "../src/browser/report.js";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -172,6 +173,15 @@ describe("the daily run", () => {
     expect(s.paused).toEqual([]);
     expect(s.waiting).toHaveLength(1);
     expect(s.sent).toHaveLength(1);
+  });
+
+  it("leaves a board alone until tomorrow once a bot check stands before its form", async () => {
+    const entries = [job({ ats: "smartrecruiters" }), job({ ats: "smartrecruiters" }), job({ ats: "lever" })];
+    const w = world(entries, (e) => (e.job.ats === "smartrecruiters" ? { status: "blocked", waitingFor: "robot_check", ready: false, reason: BOT_CHECK_REASON } : {}));
+    const s = await dailyRun(policy({ target: 3 }), { dry: false }, w.deps);
+    expect(w.ran).toEqual(["j1", "j3"]);
+    expect(s.paused).toEqual([{ board: "smartrecruiters", why: "it asked for a human check" }]);
+    expect(s.leftForYou[0]).toMatchObject({ id: "j1", why: BOT_CHECK_REASON });
   });
 
   it("pauses a board that says it is getting too many requests", async () => {

@@ -134,6 +134,13 @@ the page's own writes (POST, PUT, PATCH) with any that failed.
     it, not by its "Attach" button.
   - Selectors prefer the names a site gives its own controls
     (`data-testid`). Ids a UI library numbers on each render are not used.
+  - A form drawn entirely inside web components (SmartRecruiters) is read
+    through their open shadow roots. Its selectors cross into a root with
+    ` >>> `: `#email-input >>> #email-input` is the box with that id inside
+    the shadow root of the element with that id. Every script that finds a
+    control (`fillFields.js`, `pageHelpers.js`, `Page.setFiles`) resolves
+    them the same way. On any other page a shadow root holds a widget of the
+    site's (a cookie banner, a chat) and is not read.
   - A radio or checkbox drawn by its label, with the real box out of sight,
     is read. So are button groups and role-based radio rows.
   - A read-only date box with a calendar is kind `calendar`.

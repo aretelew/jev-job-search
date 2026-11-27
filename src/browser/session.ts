@@ -57,13 +57,15 @@ export async function install(page: Page): Promise<void> {
  */
 export const SETTLE_EXPR = `(() => {
   if (document.readyState === "loading") return "-1";
-  const controls = [...document.querySelectorAll("input, select, textarea, [role=combobox]")];
+  // A form drawn inside web components (SmartRecruiters) is in their shadow roots, so they are read too.
+  const deepAll = (sel) => { const out = []; const walk = (r) => { for (const el of r.querySelectorAll("*")) { if (el.matches(sel)) out.push(el); if (el.shadowRoot) walk(el.shadowRoot); } }; walk(document); return out; };
+  const controls = deepAll("input, select, textarea, [role=combobox]");
   const n = controls.length;
   // A form that is in the page and out of sight is not ready to be read: Workday hides a page while it saves and while it brings the next one in.
   const inSight = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   if (n >= 3 && !controls.some((el) => el.type !== "hidden" && inSight(el)) && !controls.every((el) => el.type === "hidden")) return "-1";
   let h = 0;
-  for (const el of document.querySelectorAll("label, legend, option, [role=option]")) {
+  for (const el of deepAll("label, legend, option, [role=option]")) {
     const t = el.textContent || "";
     for (let i = 0; i < t.length && i < 80; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
   }
