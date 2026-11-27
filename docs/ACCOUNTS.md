@@ -212,7 +212,7 @@ the employer's own site.
 |---|---|
 | New employer accounts per day | 3, or what you set with `--max-new` |
 | Jobs per new employer in one run | 1 |
-| Sign-in tries per account per day | 3. A refused password is never retried |
+| Sign-in tries per account per day | 10, since a Workday session ends within the hour and each later run signs in again. A refused password is never retried |
 | After a refused password, a lockout, or a sign-in that did not go through | the account is left alone until you sign in yourself, store the right password, or type `/accounts clear`. Nothing is retried on a timer |
 | Verification emails per sign-up | 1, and one request to send it again |
 

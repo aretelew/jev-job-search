@@ -529,8 +529,11 @@ export const ACCOUNTS = {
   /** How long the window that asks for the password waits for the person, in seconds, and how many times it asks again after a password that misses a rule. */
   askSeconds: 300,
   askRounds: 3,
-  /** Sign-in tries per account per day. A wrong password is never retried; this bounds everything else (a sign-in before and after an email verification is two). */
-  maxLoginAttempts: 3,
+  /**
+   * Sign-in tries per account per day. A wrong password is never retried; this bounds everything else (a sign-in before and after an
+   * email verification is two). Workday's sessions end within the hour, so a day of reruns on one form signs in again each time.
+   */
+  maxLoginAttempts: 10,
   /** How many times the tool asks a board to send its verification email again. */
   maxResends: 1,
   /** Steps one sign-in may take before it is handed to the person. */
