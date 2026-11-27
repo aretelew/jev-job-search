@@ -14,7 +14,7 @@ import { CHOICE_PATH, isoOf, shapedForBox, toYmd } from "../util/dates.js";
 import type { JevClient } from "../jev/client.js";
 import { choice, noul } from "../jev/questions.js";
 import type { Answer, ChoiceAnswer, NoulAnswer, Questions } from "../jev/types.js";
-import { ALL_KEYS, currentJob, isProfileKey, isSpecialKey, mostRecentJob, profileFacts, valueFor, valueIfRequired, type FieldKey } from "../profile/fieldKeys.js";
+import { ALL_KEYS, currentJob, isProfileKey, isSpecialKey, listFor, mostRecentJob, profileFacts, valueFor, valueIfRequired, type FieldKey } from "../profile/fieldKeys.js";
 import { candidatePreferences, monthName, sponsorshipLater, type AgreementKind, type Profile } from "../profile/schema.js";
 import { BANK_INTENTS } from "../answers/bank.js";
 import { countryOfLocations, locationTier } from "../jobs/hardFilters.js";
@@ -22,7 +22,7 @@ import type { Job } from "../jobs/normalize.js";
 import type { DumpedField, FieldsDump, FillPlan, PlannedField } from "./fields.js";
 import { documentPolicy, documentsFor, tailorJob } from "../documents/tailor.js";
 import { loadQueue } from "../jobs/queue.js";
-import { planLocations } from "./locations.js";
+import { capOf, planLocations } from "./locations.js";
 import { salaryRule } from "../profile/pay.js";
 
 const NONE = "__none__";
@@ -863,5 +863,7 @@ export function valueForJob(profile: Profile, job: Job, key: FieldKey, label = "
     const auth = authForCountry(profile, country);
     return key === "authorized_to_work" ? auth.authorized : auth.requires_sponsorship;
   }
-  return valueFor(profile, key);
+  // A list question that says how many it takes ("your top 3") gets that many.
+  const list = listFor(profile, key);
+  return list ? list.slice(0, capOf(label) ?? undefined).join(", ") || null : valueFor(profile, key);
 }

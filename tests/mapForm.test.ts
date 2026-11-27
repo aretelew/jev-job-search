@@ -28,6 +28,18 @@ describe("profile field keys", () => {
   });
 });
 
+describe("skill lists", () => {
+  it("gives a question about programming languages the languages only", () => {
+    expect(valueFor(profile, "programming_languages")).toBe("Python, TypeScript");
+    expect(valueFor(profile, "skills")).toBe("Python, TypeScript, React, Node.js, Git, Docker");
+  });
+  it("takes as many as the question asks for, in the profile's order", () => {
+    expect(valueForJob(profile, job(["Remote"]), "skills", "List your top 3 technical skills")).toBe("Python, TypeScript, React");
+    expect(valueForJob(profile, job(["Remote"]), "programming_languages", "Please rank your top 1 programming language")).toBe("Python");
+    expect(valueForJob(profile, job(["Remote"]), "programming_languages", "Which programming languages do you use?")).toBe("Python, TypeScript");
+  });
+});
+
 describe("work authorization per posting country", () => {
   it("answers truthfully for Canada and the US", () => {
     expect(authForCountry(profile, "Canada")).toEqual({ authorized: "Yes", requires_sponsorship: "No" });

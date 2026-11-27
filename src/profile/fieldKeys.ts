@@ -65,7 +65,8 @@ export const PROFILE_KEYS = {
   most_recent_company: "Most recent, last or previous employer, or the company of one entry in a work history or employment section. Never a field that asks for the current company",
   most_recent_title: "Job title at the most recent, last or previous employer, or the title of one entry in a work history or employment section. Never a field that asks for the current title",
   years_of_experience: "Total years of professional experience",
-  skills: "Technical skills or technologies, comma separated",
+  skills: "Technical skills or technologies in general, comma separated. Never a question that asks only for programming languages",
+  programming_languages: "Programming languages only, comma separated: which languages the candidate knows, uses or ranks, never frameworks or tools",
   spoken_languages: "Languages spoken",
   earliest_start_date: "Earliest or preferred date the candidate can start the job (not an education date)",
   availability: "Availability, work term length or duration",
@@ -162,7 +163,8 @@ export function valueFor(profile: Profile, key: ProfileKey): string | null {
     case "most_recent_company": return mostRecentJob(profile)?.company ?? null;
     case "most_recent_title": return mostRecentJob(profile)?.title ?? null;
     case "years_of_experience": return String(yearsOfExperience(profile));
-    case "skills": return [...profile.skills.languages, ...profile.skills.frameworks, ...profile.skills.tools].join(", ");
+    case "skills":
+    case "programming_languages": return listFor(profile, key)?.join(", ") || null;
     case "spoken_languages": return profile.spokenLanguages.map((l) => `${l.name} (${l.level})`).join(", ");
     case "earliest_start_date": return profile.preferences.earliestStart;
     case "availability": return profile.preferences.availability;
@@ -178,6 +180,15 @@ export function valueFor(profile: Profile, key: ProfileKey): string | null {
     case "previously_applied": return "No";
     case "referral_name": return null;
     case "hackathons": return profile.facts.find((f) => /hackathon/i.test(f)) ?? null;
+  }
+}
+
+/** The items of a key that is a list, in the profile's order, so a question that takes only a few gets the first ones. Null for any other key. */
+export function listFor(profile: Profile, key: ProfileKey): readonly string[] | null {
+  switch (key) {
+    case "skills": return [...profile.skills.languages, ...profile.skills.frameworks, ...profile.skills.tools];
+    case "programming_languages": return profile.skills.languages;
+    default: return null;
   }
 }
 
