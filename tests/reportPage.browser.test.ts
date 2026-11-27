@@ -3,21 +3,19 @@
  * the page draws its four screens, sends an answer with the token it was given, and offers
  * "remember" only for a question that may be kept. Skipped where Chrome is not installed.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { createServer as netServer, type AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Page, sleep, type Target } from "../src/browser/cdp.js";
-import { BROWSER, childEnv, DAILY } from "../src/config.js";
+import { sleep } from "../src/browser/cdp.js";
+import { BROWSER, DAILY } from "../src/config.js";
 import { buildReport } from "../src/report/data.js";
 import type { Needs } from "../src/report/needs.js";
 import { reportPage } from "../src/report/page.js";
 import { Level, Policy, Where } from "../src/run/policy.js";
 import type { automation as automationOf } from "../src/report/server.js";
 import type { LiveView } from "../src/run/live.js";
+import { startChrome, type TestChrome } from "./helpers/chrome.js";
 
 const TOKEN = "made-up-token-for-the-test";
 const needs: Needs = {
@@ -66,11 +64,9 @@ const live: LiveView = {
 };
 
 describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real browser", () => {
-  let chrome: ChildProcess;
+  let chrome: TestChrome;
   let server: Server;
   let origin = "";
-  let port = 0;
-  let profile = "";
   const posts: { path: string; token: string; body: unknown }[] = [];
 
   beforeAll(async () => {
@@ -94,32 +90,16 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
     });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    port = await new Promise<number>((resolve) => {
-      const s = netServer();
-      s.listen(0, "127.0.0.1", () => {
-        const p = (s.address() as AddressInfo).port;
-        s.close(() => resolve(p));
-      });
-    });
-    profile = mkdtempSync(path.join(tmpdir(), "jev-chrome-"));
-    chrome = spawn(BROWSER.chromePath, ["--headless=new", "--window-size=1280,900", `--remote-debugging-port=${port}`, "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore", env: childEnv() });
-    for (let i = 0; i < 80; i++) {
-      if (await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)) return;
-      await sleep(250);
-    }
-    throw new Error("headless Chrome did not start");
+    chrome = await startChrome(["--window-size=1280,900"]);
   }, 30_000);
 
   afterAll(async () => {
-    chrome?.kill();
+    await chrome?.close();
     await new Promise<void>((r) => server.close(() => r()));
-    await sleep(300);
-    rmSync(profile, { recursive: true, force: true });
   });
 
   it("draws its screens, and sends an answer with the token and only what was typed", async () => {
-    const tab = (await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json()) as Target;
-    const page = await Page.attach(tab);
+    const page = await chrome.tab();
     const errors: string[] = [];
     page.on("Runtime.exceptionThrown", (p) => void errors.push(JSON.stringify(p).slice(0, 300)));
     await page.navigate(origin);
