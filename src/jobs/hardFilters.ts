@@ -21,16 +21,35 @@ const CA_PROVINCE = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b|\bCanada\b|Tor
 
 export type LocationTier = "vancouver" | "canada" | "remote" | "us" | "international" | "unclear";
 
+/** Workday writes a site as country, region, then the place: "GB-NU-CRAMLINGTON", "US-CA-San Jose". */
+const SITE_CODE = /^([A-Z]{2})-[A-Z0-9]{1,3}-(.*)$/;
+/** What a site in another country reads as. No pattern here matches it, so it can only be international. */
+const ELSEWHERE = "outside North America";
+
+/**
+ * A posting's locations as one string for the patterns here. A Workday site code is read by its country,
+ * and its region code is never read on its own: "GB-NU" is Northumberland, not Nunavut, and "DE-BW" is Germany, not Delaware.
+ */
+function readable(locations: string[]): string {
+  return locations
+    .map((location) => {
+      const [, country, place] = SITE_CODE.exec(location.trim()) ?? [];
+      if (!country) return location;
+      return country === "US" ? "United States" : country === "CA" ? `${place}, Canada` : ELSEWHERE;
+    })
+    .join(" | ");
+}
+
 /** The country a posting's locations name, when one of them does: "San Francisco, Remote" is the United States, "KOHO (CAN), Remote" is Canada. */
 export function countryOfLocations(locations: string[]): "Canada" | "United States" | null {
-  const all = locations.join(" | ");
+  const all = readable(locations);
   if (CA_PROVINCE.test(all) || /\bCAN\b/.test(all)) return "Canada";
   if (US_STATE.test(all) || US_CITY.test(all)) return "United States";
   return null;
 }
 
 export function locationTier(locations: string[]): LocationTier {
-  const all = locations.join(" | ");
+  const all = readable(locations);
   if (/vancouver|burnaby|richmond, bc|surrey, bc/i.test(all)) return "vancouver";
   if (CA_PROVINCE.test(all)) return "canada";
   if (/remote/i.test(all) && !/remote.*(us|united states|usa)\b/i.test(all)) return "remote";

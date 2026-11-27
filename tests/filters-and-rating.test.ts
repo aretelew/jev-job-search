@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { DISCOVER } from "../src/config.js";
 import { isEarlyCareerTitle } from "../src/discover.js";
-import { locationTier, preFilter } from "../src/jobs/hardFilters.js";
+import { countryOfLocations, locationTier, preFilter } from "../src/jobs/hardFilters.js";
 import type { Job } from "../src/jobs/normalize.js";
 import { FIT_QUESTIONS, fitQuestions, ratingContext, scoreFromAnswers } from "../src/jobs/rate.js";
 import { ProfileSchema, usStatus } from "../src/profile/schema.js";
@@ -29,9 +29,25 @@ describe("locationTier", () => {
     [["NYC"], "us"],
     [["Palo Alto, CA"], "us"],
     [["London, UK"], "international"],
+    // Workday site codes: the country comes first, and the region code is not a state or province.
+    [["GB-NU-CRAMLINGTON-ATLEY WAY NORTH NELSON INDUSTRIAL ESTATE"], "international"],
+    [["DE-BW-STUTENSEE-LORENZSTRASSE 10"], "international"],
+    [["IN-KA-Bangalore, India"], "international"],
+    [["US-CA-San Jose"], "us"],
+    [["CA-BC-Vancouver"], "vancouver"],
+    [["CA-ON-Toronto"], "canada"],
     [[], "unclear"],
   ])("%j → %s", (locs, tier) => {
     expect(locationTier(locs)).toBe(tier);
+  });
+});
+
+describe("countryOfLocations", () => {
+  it("reads a Workday site code by its country", () => {
+    expect(countryOfLocations(["GB-NU-CRAMLINGTON"])).toBeNull();
+    expect(countryOfLocations(["DE-BW-STUTENSEE"])).toBeNull();
+    expect(countryOfLocations(["US-NY-New York"])).toBe("United States");
+    expect(countryOfLocations(["CA-ON-Toronto"])).toBe("Canada");
   });
 });
 
