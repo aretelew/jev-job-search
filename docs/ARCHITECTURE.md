@@ -69,7 +69,7 @@ Timing on 2026-10-02: 4,748 unique postings, 478 rated, 61 seconds, $0.075.
 | `src/forms/*.js` | The three scripts that run inside the page |
 | `src/forms/mapForm.ts` | Asking JEV what goes in each field |
 | `src/forms/locations.ts` | Questions about which of the employer's offices: JEV places each option, code chooses |
-| `src/answers/` | The writer (headless Claude Code by default; the Claude API, the Codex CLI or an OpenAI-compatible service when `.env` says so), the answer memory, drafts and voice. `research.ts` looks up a few technical facts about a company on the web, told only the company and the posting, so an answer about the company can say something specific; the writer gets them as `company_notes` |
+| `src/answers/` | The writer (headless Claude Code by default; the Claude API, the Codex CLI or an OpenAI-compatible service when `.env` says so), the answer memory, drafts and voice. `research.ts` looks up a few technical facts about a company on the web, told only the company and the posting, so an answer about the company is about the right things, in broad strokes; the writer gets them as `company_notes` |
 | `src/documents/` | Tailored resumes and cover letters: the writer's draft, the truth gate (`unsupportedClaims`), HTML rendered to PDF through Chrome (`printPdf`) |
 | `src/accounts/` | Boards that want an account: what the person allowed (`config.ts`), the Keychain (`secrets.ts`), the sign-in itself (`auth.ts`), one adapter per board (`workday.ts`), whether a job may be taken (`capability.ts`) |
 | `src/mail/` | Gmail, read-only (`gmail.ts`), and finding the one verification email an account asked for (`verification.ts`) |

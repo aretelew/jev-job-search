@@ -27,9 +27,10 @@ from `applywithjev answer-context`; nothing is submitted that breaks them.
   job posting, and the company's own public pages. Nothing invented, nothing
   rounded up.
 - Answer the question that was asked. A question about the company, its
-  product or the role is answered about them. A project comes in only when
-  the question asks about your work, or as one short detail that backs up the
-  point.
+  product or the role is answered about them, in broad strokes: what they
+  build and what makes it hard, not the details of a tool, an API or an SDK.
+  A project comes in when the question asks about your work, or when it is
+  the actual reason for the point, woven in and never tacked on at the end.
 - Never claim US work authorization. Never mention the GPA unless asked.
 - No "as an AI", no apologies, no hedging phrases like "I believe I would be a
   great fit".
