@@ -1,0 +1,33 @@
+{
+  "meta": {},
+  "result": {
+    "jobOpening": {
+      "jobOpeningShareUrl": "https://amii.bamboohr.com/careers/254",
+      "jobOpeningName": "Machine Learning Resident - Client: Publicus (12 month term)",
+      "jobOpeningStatus": "Open",
+      "jobCategoryId": null,
+      "departmentId": "18681",
+      "departmentLabel": "Department:  Advanced Technology",
+      "employmentStatusLabel": "Full-Time Term",
+      "employmentType": null,
+      "location": {
+        "city": "Edmonton",
+        "state": "Alberta",
+        "addressCountry": "Canada"
+      },
+      "atsLocation": {
+        "country": null,
+        "countryId": null,
+        "state": null,
+        "city": null
+      },
+      "description": "<p><span style=\"color: rgb(250, 165, 60); font-size: 18pt\">“If you are excited about applying to LLMs to tackle real-world challenges in government procurement, this is a perfect opportunity for you. Be a part of the team of research and machine learning scientists building deployable real-world ML applications from ground up and get mentored by some of the best minds in AI during the process.” </span></p>\n<p><span style=\"color: rgb(250, 165, 60); font-size: 18pt\">- Maithreye, Machine Learning Scientist </span></p>\n<p><br></p>\n<p><span style=\"color: rgb(108, 152, 171); font-size: 14pt; font-weight: bold\">About the Role</span></p>\n<p><span style=\"font-size: 10pt\">This is a paid Residency that will be undertaken over a twelve-month period with the potential to be hired by our client, Publicus, afterwards (note: at the discretion of the client). The Resident will report to an Amii Scientist and regularly consult with the client team to share insights and engage in knowledge transfer activities. </span><span style=\"font-size: 10pt\"><br><br></span></p>\n<p><span style=\"font-size: 10pt\">Successful candidates will be members of a cross-functional project team with backgrounds in ML research, project management, software engineering, and new product development. This is a rare opportunity to be mentored by world-class scientists and to develop something truly impactful. </span></p>\n<p><br></p>",
+      "compensation": null,
+      "datePosted": "2026-11-17",
+      "minimumExperience": "Entry-level",
+      "locationType": "2",
+      "seekPromoted": false,
+      "aiProcessingDisclosureEnabled": false
+    }
+  }
+}

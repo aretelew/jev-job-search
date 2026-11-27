@@ -1,32 +1,18 @@
 /**
- * Company boards worth polling directly. Seeded from every Greenhouse, Lever, Ashby, Gem and SmartRecruiters URL the
+ * Company boards worth polling directly. Seeded from every Greenhouse, Lever, Ashby, Gem, SmartRecruiters, Workable and BambooHR URL the
  * list sources mention (those companies are hiring early-career now), plus a hand-kept list of
  * boards that post Canadian and remote early-career software roles. Polling the board catches
  * postings the lists have not picked up yet, which is where the freshest ones are.
  */
-import { ashbySlug, fetchAshbyBoard } from "./ats/ashby.js";
-import { fetchGemBoard, gemSlug } from "./ats/gem.js";
-import { fetchGreenhouseBoard, greenhouseSlug } from "./ats/greenhouse.js";
-import { fetchLeverBoard, leverSlug } from "./ats/lever.js";
-import { fetchSmartRecruitersBoard, smartRecruitersSlug } from "./ats/smartrecruiters.js";
 import type { Job } from "../jobs/normalize.js";
+import { readable, readerFor, type ReadableAts } from "./ats/readers.js";
 
-/** Each board the tool can read whole: how a posting link names its board, and how the board is read. */
-const READERS = {
-  greenhouse: { slug: greenhouseSlug, read: fetchGreenhouseBoard },
-  lever: { slug: leverSlug, read: fetchLeverBoard },
-  ashby: { slug: ashbySlug, read: fetchAshbyBoard },
-  gem: { slug: gemSlug, read: fetchGemBoard },
-  smartrecruiters: { slug: smartRecruitersSlug, read: fetchSmartRecruitersBoard },
-} satisfies Record<string, { slug: (url: string) => string | null; read: (slug: string, company: string) => Promise<Job[]> }>;
+export type Board = { ats: ReadableAts; slug: string; company: string };
 
-export type Board = { ats: keyof typeof READERS; slug: string; company: string };
-
-const readable = (ats: string): ats is Board["ats"] => Object.hasOwn(READERS, ats);
 const boardKey = (b: Board) => `${b.ats}:${b.slug.toLowerCase()}`;
 
 /** Every posting on one board, read from its API. */
-export const readBoard = (b: Board): Promise<Job[]> => READERS[b.ats].read(b.slug, b.company);
+export const readBoard = (b: Board): Promise<Job[]> => readerFor(b.ats).read(b.slug, b.company);
 
 /** Boards polled on every discover run regardless of what the lists mention. */
 export const SEED_BOARDS: Board[] = [
@@ -120,7 +106,7 @@ export function boardsFromJobs(jobs: Job[], seeds: Board[] = SEED_BOARDS): Board
   seeds.forEach(add);
   for (const j of jobs) {
     if (!readable(j.ats)) continue;
-    const slug = READERS[j.ats].slug(j.url);
+    const slug = readerFor(j.ats).slug(j.url);
     if (slug) add({ ats: j.ats, slug, company: j.company });
   }
   return [...map.values()];

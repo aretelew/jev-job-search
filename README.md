@@ -99,7 +99,7 @@ The agent that runs the skills and the model that writes your answers are two se
 | **Systems** | macOS, Linux and Windows. Linux and Windows are new: every test runs on all three in CI, with a real browser and each system's real secret store, but a full run on a Linux or Windows desktop has not been done by the maintainer yet. [docs/PLATFORMS.md](docs/PLATFORMS.md) says exactly what was and was not tried. |
 | **Agents** | Claude Code (the default, through `CLAUDE.md` and `.claude/skills`). Codex and others through `AGENTS.md`. |
 | **Writers** | Claude Code on your subscription (the default), the Claude API on your key, the Codex CLI on your ChatGPT plan, or any service that speaks OpenAI's chat completions, such as OpenAI, OpenRouter, or a model on your own machine through Ollama. One line in `.env`: [Choosing the writer](docs/SETUP.md#choosing-the-writer). Only Claude has been run on real forms. |
-| **Job boards** | Greenhouse, Lever, Ashby, Gem and SmartRecruiters by link or from the queue, and Workable, Rippling, BambooHR, Jobvite and JazzHR forms from the queue. SmartRecruiters forms are new: rehearse one first. Workday is [in progress](#jobs-that-want-an-account). |
+| **Job boards** | Greenhouse, Lever, Ashby, Gem, SmartRecruiters, Workable and BambooHR by link or from the queue, and Rippling, Jobvite and JazzHR forms from the queue. SmartRecruiters forms are new: rehearse one first. Workday is [in progress](#jobs-that-want-an-account). |
 | **Browsers** | The tool opens its own Chrome window with its own profile. Your everyday browser is not touched. |
 
 ## How it works

@@ -8,7 +8,7 @@ import { knownTarget } from "./shortLinkStore.js";
 
 export type Ats =
   | "greenhouse" | "lever" | "ashby" | "gem" | "workday" | "icims" | "smartrecruiters" | "jobvite"
-  | "rippling" | "bamboohr" | "taleo" | "oracle" | "successfactors" | "linkedin" | "amazon" | "other";
+  | "rippling" | "bamboohr" | "workable" | "taleo" | "oracle" | "successfactors" | "linkedin" | "amazon" | "other";
 
 export type Sponsorship = "offers" | "none" | "citizenship" | "unknown";
 
@@ -61,6 +61,9 @@ export function postingKey(raw: string): string {
   // Workable links one job as /j/CODE and as /company/j/CODE.
   const workable = hostIs(host, "workable.com") ? /\/j\/([A-Z0-9]{6,})/i.exec(url)?.[1] : undefined;
   if (workable) return `workable:${workable.toUpperCase()}`;
+  // BambooHR numbers each employer's openings on its own.
+  const bamboo = hostIs(host, "bamboohr.com") ? bambooOpening(url) : null;
+  if (bamboo) return `bamboohr:${host.split(".")[0]}:${bamboo}`;
   // SmartRecruiters links one posting under its number, with the company spelled as the board or the list
   // spells it (AboutYou, ABOUTYOUGmbH) and the title after it or not.
   const smartRecruiters = hostIs(host, "smartrecruiters.com") ? /^\/[^/]+\/(\d{6,})(?:-|$)/.exec(new URL(url).pathname)?.[1] : undefined;
@@ -71,6 +74,11 @@ export function postingKey(raw: string): string {
   // Greenhouse numbers its EU and US postings separately.
   if (gh) return `greenhouse${hostIs(host, "eu.greenhouse.io") ? "-eu" : ""}:${gh}`;
   return url;
+}
+
+/** A BambooHR opening's number: /careers/254, or the older /jobs/view.php?id=254. */
+export function bambooOpening(url: string): string | null {
+  return /\/careers\/(\d+)|\/jobs\/view\.php\?(?:.*&)?id=(\d+)/i.exec(url)?.slice(1).find(Boolean) ?? null;
 }
 
 /**
@@ -125,6 +133,7 @@ export function atsFromUrl(url: string): Ats {
   if (on("jobvite.com")) return "jobvite";
   if (on("rippling.com")) return "rippling";
   if (on("bamboohr.com")) return "bamboohr";
+  if (on("workable.com")) return "workable";
   if (on("taleo.net")) return "taleo";
   if (on("oraclecloud.com")) return "oracle";
   if (on("successfactors.com", "jobs.sap.com") || /[?&]ats=successfactors\b/.test(u)) return "successfactors";

@@ -98,7 +98,7 @@ or `--status queued` to try again.
 | [negarprh/Canadian-Tech-Internships-2027](https://github.com/negarprh/Canadian-Tech-Internships-2027) | Internships in Canada. |
 | [vanshb03/Summer2027-Internships](https://github.com/vanshb03/Summer2027-Internships) | Internships in the United States and Canada. |
 | [michelleokolie/canada-tech-internships-summer-2027](https://github.com/michelleokolie/canada-tech-internships-summer-2027) | Internships in Canada. |
-| Company job boards | The tool asks Greenhouse, Lever, Ashby, Gem and SmartRecruiters directly for the jobs of every company the lists name, and of 73 more companies. This finds jobs a day or two before the lists do. |
+| Company job boards | The tool asks Greenhouse, Lever, Ashby, Gem, SmartRecruiters, Workable and BambooHR directly for the jobs of every company the lists name, and of 73 more companies. This finds jobs a day or two before the lists do. |
 | Your own list | Put a CSV file with a company column and a link column in `data/imports/`. |
 
 On one search, these sources gave 4,748 different jobs. The tool counts a

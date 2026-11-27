@@ -1,0 +1,35 @@
+{
+  "id": 6230870,
+  "shortcode": "EB77DE8198",
+  "title": "Summer 2027 Internship - Quantum Software (QSW)",
+  "remote": false,
+  "location": {
+    "city": "Chicago",
+    "country": "United States",
+    "countryCode": "US",
+    "region": "Illinois"
+  },
+  "locations": [
+    {
+      "city": "Chicago",
+      "country": "United States",
+      "countryCode": "US",
+      "hidden": false,
+      "region": "Illinois"
+    }
+  ],
+  "state": "published",
+  "isInternal": false,
+  "code": "SMMR2027",
+  "published": "2026-10-28T00:00:00.000Z",
+  "language": "en",
+  "department": [
+    "Quantum Computing"
+  ],
+  "accountUid": "8bbb2e83-218f-46db-b988-36c93d5a8be2",
+  "approvalStatus": "approved",
+  "workplace": "on_site",
+  "description": "<p>This internship program is within our Quantum Software (QSW) division. Interns work closely with Infleqtion’s Quantum Software Engineers and are paired with a mentor on the team. This program is intended to run for 10 to 12 weeks. Features of the program include:&nbsp;</p><ul><li>Contribution to cutting-edge quantum software solutions from application to middleware layers&nbsp;&nbsp;</li><li>Weekly 1:1 meetings with your mentor to discuss summer projects and professional development&nbsp;&nbsp;</li><li>Research talks from Infleqtion engineers and experts in the industry&nbsp;&nbsp;</li><li>Primary internship location is Chicago, IL&nbsp;&nbsp;</li></ul><p><u><strong>Job Duties and Responsibilities</strong></u><u>&nbsp;</u></p><p>The duties and responsibilities outlined below include potential functions of the role. Depending on business needs, this role may perform a combination of some or all of the following duties. Duties, responsibilities, and activities may change, or new ones may be assigned.&nbsp;</p>",
+  "requirements": "<ul><li>Currently attending a degree program (computer science, engineering, physics, mathematics, or a directly related field) in the US, preferably in penultimate academic year when returning to degree program after completion of internship&nbsp;&nbsp;</li><li>High proficiency in programming, with fluency in Python preferable <strong>or</strong> proficiency in alternative languages (e.g. C/C++ or Julia) with the ability to rapidly upskill in Python&nbsp;&nbsp;</li></ul><p><u><strong>Preferred Qualifications</strong></u><u>&nbsp;</u></p>",
+  "benefits": ""
+}

@@ -9,8 +9,11 @@ import { leverJobId, leverSlug } from "../src/sources/ats/lever.js";
 import { gemJobId, gemJobs, gemSlug } from "../src/sources/ats/gem.js";
 import { fetchSmartRecruitersBoard, smartRecruitersDescription, smartRecruitersJobId, smartRecruitersJobs, smartRecruitersPosting, smartRecruitersSlug } from "../src/sources/ats/smartrecruiters.js";
 import { DISCOVER } from "../src/config.js";
+import { workableDescription, workableJobId, workableJobs, workableSlug } from "../src/sources/ats/workable.js";
+import { bambooDescription, bambooJobs, bambooSlug } from "../src/sources/ats/bamboohr.js";
 import { boardsFromJobs } from "../src/sources/companies.js";
-import { atsFromUrl, postingKey } from "../src/jobs/normalize.js";
+import { readerFor } from "../src/sources/ats/readers.js";
+import { atsFromUrl, bambooOpening, postingKey } from "../src/jobs/normalize.js";
 import { isEarlyCareerTitle } from "../src/discover.js";
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -176,6 +179,105 @@ describe("a SmartRecruiters board", () => {
     // A list links the same posting with the title after its number, or with the company spelled another way.
     expect(postingKey(`${URL_}-software-development-degree-apprenticeship?oga=true`)).toBe(postingKey(URL_));
     expect(postingKey("https://jobs.smartrecruiters.com/ajbell1/744000163865709")).toBe("smartrecruiters:744000163865709");
+  });
+});
+
+describe("a Workable board", () => {
+  const URL_ = "https://apply.workable.com/coldquanta/j/EB77DE8198";
+
+  it("knows a Workable posting link, its account and its code", () => {
+    expect(atsFromUrl(URL_)).toBe("workable");
+    expect(workableSlug(`${URL_}/apply`)).toBe("coldquanta");
+    expect(workableJobId(`${URL_}/apply`)).toBe("EB77DE8198");
+    // Workable's own short link names the posting but not the account.
+    expect(workableJobId("https://apply.workable.com/j/eb77de8198")).toBe("EB77DE8198");
+    expect(workableSlug("https://apply.workable.com/j/EB77DE8198")).toBeNull();
+    expect(workableJobId("https://apply.workable.com/coldquanta")).toBeNull();
+  });
+
+  it("reads every posting with its places, date and department, and leaves the description for later", () => {
+    const jobs = workableJobs(JSON.parse(fixture("workable-board.json")), "coldquanta", "Infleqtion");
+    expect(jobs.map((j) => j.title)).toEqual(["Summer 2027 Internship - Quantum Software (QSW)", "Accounts Payable Manager (Finance and Accounting)"]);
+    expect(jobs[0]).toMatchObject({ source: "workable:coldquanta", company: "Infleqtion", ats: "workable", url: URL_, postedAt: "2026-10-28", category: "Quantum Computing", locations: ["Chicago, Illinois, United States"], description: "", descriptionSource: "none" });
+    // A posting open to remote work says so among its places.
+    const board = JSON.parse(fixture("workable-board.json")) as { jobs: Record<string, unknown>[] };
+    const remote = workableJobs({ jobs: [{ ...board.jobs[0], telecommuting: true }] }, "coldquanta", "Infleqtion");
+    expect(remote[0]?.locations).toEqual(["Chicago, Illinois, United States", "Remote"]);
+    expect(workableJobs({ error: "not found" }, "coldquanta", "Infleqtion")).toEqual([]);
+  });
+
+  it("reads a posting's description, requirements and benefits from its own endpoint", () => {
+    const text = workableDescription(JSON.parse(fixture("workable-posting.json")));
+    expect(text).toMatch(/^This internship program is within our Quantum Software/);
+    expect(text).toMatch(/\nRequirements\n/);
+    expect(text).not.toMatch(/<li>|<p>/);
+    expect(workableDescription(null)).toBeNull();
+  });
+
+  it("is polled for an account a list links there, and knows a posting however the link spells it", () => {
+    const jobs = workableJobs(JSON.parse(fixture("workable-board.json")), "coldquanta", "Infleqtion");
+    expect(boardsFromJobs(jobs.slice(0, 1), [])).toEqual([{ ats: "workable", slug: "coldquanta", company: "Infleqtion" }]);
+    expect(new Set(jobs.map((j) => postingKey(j.url))).size).toBe(2);
+    expect(postingKey("https://apply.workable.com/j/EB77DE8198/apply")).toBe(postingKey(URL_));
+  });
+});
+
+describe("a BambooHR careers page", () => {
+  const URL_ = "https://amii.bamboohr.com/careers/250";
+
+  it("knows a BambooHR opening link, its employer and its number", () => {
+    expect(atsFromUrl(URL_)).toBe("bamboohr");
+    expect(bambooSlug(URL_)).toBe("amii");
+    expect(bambooSlug("https://AMII.bamboohr.com/jobs/view.php?id=250")).toBe("amii");
+    expect(bambooOpening(`${URL_}/detail`)).toBe("250");
+    expect(bambooOpening("https://amii.bamboohr.com/jobs/view.php?source=x&id=250")).toBe("250");
+    // BambooHR's own sites are not an employer's careers page.
+    expect(bambooSlug("https://www.bamboohr.com/careers")).toBeNull();
+    expect(bambooOpening("https://amii.bamboohr.com/careers")).toBeNull();
+  });
+
+  it("reads every opening with its place and department, and leaves the description and date for later", () => {
+    const jobs = bambooJobs(JSON.parse(fixture("bamboohr-board.json")), "amii", "Amii");
+    expect(jobs.map((j) => j.title)).toEqual(["Research Associate (12 month term)", "Event Manager, Upper Bound", "Product Owner, Startups"]);
+    expect(jobs[0]).toMatchObject({ source: "bamboohr:amii", company: "Amii", ats: "bamboohr", url: URL_, postedAt: null, category: "Advanced Technology", locations: ["Edmonton, Alberta"], description: "", descriptionSource: "none" });
+    expect(bambooJobs({ result: "nope" }, "amii", "Amii")).toEqual([]);
+  });
+
+  it("reads an opening's description from its own endpoint", () => {
+    const text = bambooDescription(JSON.parse(fixture("bamboohr-posting.json")));
+    expect(text).toMatch(/LLMs/);
+    expect(text).not.toMatch(/<p>|<span/);
+    expect(bambooDescription({ result: {} })).toBeNull();
+  });
+
+  it("is polled for an employer a list links there, and knows an opening however the link spells it", () => {
+    const jobs = bambooJobs(JSON.parse(fixture("bamboohr-board.json")), "amii", "Amii");
+    expect(boardsFromJobs(jobs.slice(0, 1), [])).toEqual([{ ats: "bamboohr", slug: "amii", company: "Amii" }]);
+    expect(new Set(jobs.map((j) => postingKey(j.url))).size).toBe(3);
+    expect(postingKey("https://amii.bamboohr.com/jobs/view.php?id=250")).toBe(postingKey(URL_));
+    // Two employers may each have an opening 250.
+    expect(postingKey("https://other.bamboohr.com/careers/250")).not.toBe(postingKey(URL_));
+  });
+});
+
+describe("the boards the tool reads", () => {
+  it("know their own postings again by link: the board and the posting each link names", () => {
+    const boards = [
+      { slug: "nominal", jobs: gemJobs(JSON.parse(fixture("gem-board.json")), "nominal", "Nominal") },
+      { slug: "AJBell1", jobs: smartRecruitersJobs(JSON.parse(fixture("smartrecruiters-board.json")), "AJBell1", "AJ Bell") },
+      { slug: "coldquanta", jobs: workableJobs(JSON.parse(fixture("workable-board.json")), "coldquanta", "Infleqtion") },
+      { slug: "amii", jobs: bambooJobs(JSON.parse(fixture("bamboohr-board.json")), "amii", "Amii") },
+    ];
+    for (const { slug, jobs } of boards) {
+      for (const j of jobs) {
+        const reader = readerFor(j.ats);
+        expect(reader?.slug(j.url)).toBe(slug);
+        expect(reader?.jobId(j.url)).toBeTruthy();
+      }
+    }
+    // A board read some other way has no reader here.
+    expect(readerFor("workday")).toBeNull();
+    expect(readerFor("other")).toBeNull();
   });
 });
 

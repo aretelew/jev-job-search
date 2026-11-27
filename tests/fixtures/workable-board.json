@@ -1,0 +1,64 @@
+{
+  "name": "Infleqtion",
+  "description": "",
+  "jobs": [
+    {
+      "title": "Summer 2027 Internship - Quantum Software (QSW)",
+      "shortcode": "EB77DE8198",
+      "code": "SMMR2027",
+      "employment_type": "",
+      "telecommuting": false,
+      "department": "Quantum Computing",
+      "url": "https://apply.workable.com/j/EB77DE8198",
+      "shortlink": "https://apply.workable.com/j/EB77DE8198",
+      "application_url": "https://apply.workable.com/j/EB77DE8198/apply",
+      "published_on": "2026-10-28",
+      "created_at": "2026-10-28",
+      "country": "United States",
+      "city": "Chicago",
+      "state": "Illinois",
+      "education": "",
+      "experience": "",
+      "function": "",
+      "industry": "Defense & Space",
+      "locations": [
+        {
+          "country": "United States",
+          "countryCode": "US",
+          "city": "Chicago",
+          "region": "Illinois",
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "title": "Accounts Payable Manager (Finance and Accounting)",
+      "shortcode": "212FC0AB03",
+      "code": "AP Manager",
+      "employment_type": "Full-time",
+      "telecommuting": false,
+      "department": "Finance and Accounting",
+      "url": "https://apply.workable.com/j/212FC0AB03",
+      "shortlink": "https://apply.workable.com/j/212FC0AB03",
+      "application_url": "https://apply.workable.com/j/212FC0AB03/apply",
+      "published_on": "2026-11-10",
+      "created_at": "2026-10-12",
+      "country": "United States",
+      "city": "Louisville",
+      "state": "Colorado",
+      "education": "",
+      "experience": "Mid-Senior level",
+      "function": "Accounting/Auditing",
+      "industry": "Defense & Space",
+      "locations": [
+        {
+          "country": "United States",
+          "countryCode": "US",
+          "city": "Louisville",
+          "region": "Colorado",
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}

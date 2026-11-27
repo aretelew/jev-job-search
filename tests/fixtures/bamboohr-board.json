@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "totalCount": 5
+  },
+  "result": [
+    {
+      "id": "250",
+      "jobOpeningName": "Research Associate (12 month term)",
+      "departmentId": "18681",
+      "departmentLabel": "Department:  Advanced Technology",
+      "employmentStatusLabel": "Full-Time Term",
+      "employmentType": null,
+      "location": {
+        "city": "Edmonton",
+        "state": "Alberta"
+      },
+      "atsLocation": {
+        "country": null,
+        "state": null,
+        "province": null,
+        "city": null
+      },
+      "isRemote": null,
+      "locationType": "2"
+    },
+    {
+      "id": "251",
+      "jobOpeningName": "Event Manager, Upper Bound ",
+      "departmentId": "18776",
+      "departmentLabel": "Department: Events & Hosting",
+      "employmentStatusLabel": "Full-Time Permanent",
+      "employmentType": null,
+      "location": {
+        "city": "Edmonton",
+        "state": "Alberta"
+      },
+      "atsLocation": {
+        "country": null,
+        "state": null,
+        "province": null,
+        "city": null
+      },
+      "isRemote": null,
+      "locationType": "2"
+    },
+    {
+      "id": "252",
+      "jobOpeningName": "Product Owner, Startups",
+      "departmentId": "18692",
+      "departmentLabel": "Department:  Startups",
+      "employmentStatusLabel": "Full-Time Permanent",
+      "employmentType": null,
+      "location": {
+        "city": "Edmonton",
+        "state": "Alberta"
+      },
+      "atsLocation": {
+        "country": null,
+        "state": null,
+        "province": null,
+        "city": null
+      },
+      "isRemote": null,
+      "locationType": "2"
+    }
+  ]
+}
