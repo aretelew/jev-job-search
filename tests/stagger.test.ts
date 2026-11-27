@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { RUN } from "../src/config.js";
 import type { QueueEntry } from "../src/jobs/queue.js";
-import { employerKey, interleaveEmployers, pickJobs } from "../src/run/pipeline.js";
+import { employerKey } from "../src/jobs/queue.js";
+import { interleaveEmployers, pickJobs } from "../src/run/pipeline.js";
 
 const entry = (id: string, company: string, score: number): QueueEntry =>
   ({

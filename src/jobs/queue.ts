@@ -210,6 +210,33 @@ export function entryFor(job: Job, fit: FitResult | null, preFilterReason: strin
   };
 }
 
+/** One employer under its spellings: "DoorDash", "Doordash Canada" and "DoorDash, Inc." pace together. */
+export function employerKey(company: string): string {
+  return company
+    .toLowerCase()
+    .replace(/\b(inc|ltd|llc|corp|corporation|co|company|limited|canada|usa|technologies|labs|group)\b\.?/g, "")
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+}
+
+/** Statuses of a job the candidate has sent or is sending now. A job merely queued is not one they have decided to send. */
+const APPLYING: readonly QueueStatus[] = ["in_progress", "applied", "submission_unknown", "awaiting_user_action"];
+
+/** Another role the candidate is applying for at the same employer, as the writer is told it. */
+export type OtherRole = { title: string; sent: boolean };
+
+/**
+ * The candidate's other roles at this job's employer: sent, waiting on them, or in this run
+ * (`inRun`: a rehearsal leaves its jobs queued). A form that asks whether they are applying for
+ * more than one role there is answered from this.
+ */
+export function otherRolesHere(entries: QueueEntry[], entry: QueueEntry, inRun: ReadonlySet<string> = new Set()): OtherRole[] {
+  const key = employerKey(entry.job.company);
+  return entries
+    .filter((e) => e.job.id !== entry.job.id && (APPLYING.includes(e.status) || inRun.has(e.job.id)) && employerKey(e.job.company) === key)
+    .map((e) => ({ title: e.job.title, sent: MAYBE_SENT.includes(e.status) }));
+}
+
 /** Highest score first; ties go to the most recent posting. */
 export function sortEntries(entries: QueueEntry[]): QueueEntry[] {
   return [...entries].sort((a, b) => {

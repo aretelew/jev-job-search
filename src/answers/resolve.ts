@@ -11,7 +11,7 @@ import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { childEnv, DOCUMENTS, PATHS, RESEARCH, WRITER, writerApi, writerBackend, writerModel } from "../config.js";
-import type { QueueEntry } from "../jobs/queue.js";
+import type { OtherRole, QueueEntry } from "../jobs/queue.js";
 import { basedIn, candidatePreferences, type Profile } from "../profile/schema.js";
 import { salaryRule } from "../profile/pay.js";
 import { BANK_DRAFTS, BANK_INTENTS } from "./bank.js";
@@ -36,6 +36,7 @@ const SYSTEM = [
   "- Never choose a date, a time slot or a venue for an interview, an assessment or an event on the candidate's behalf. That field is left unanswered and the verdict is \"needs_review\".",
   "- How the candidate heard about the job: never name a site, a person, a referral or an event the facts do not give. Choose an online job posting, the company's own careers site, or Other (for a list under a heading, \"Job Board > Other\"). If none of those is offered, leave it unanswered and set the verdict to \"needs_review\".",
   "- If the form requires a cover letter or references, set verdict to \"skip\" with the reason.",
+  "- other_roles_here lists the candidate's other roles at this company: sent (sent: true) or being sent now. A question about applying for more than one role there is answered from it: name those roles when it lists any, and never say this is the only one. The reason for applying to several is the work they share, from the postings and the facts.",
   "- Whether to apply is the candidate's decision, already made. A posting that prefers another graduation date, location or visa status is not a reason to stop: answer every question truthfully, follow the standing answers, and note the mismatch in reason while keeping the verdict \"ready\".",
   "",
   "How to answer each kind of field.",
@@ -98,9 +99,9 @@ export function buildSystem(profile: Profile): string {
 /** Changes whenever anything the writer is told about the candidate changes. Remembered answers are tied to it. */
 export const contextFingerprint = (profile: Profile) => fingerprintOf(buildSystem(profile));
 
-/** The part that changes per form: the job, what is known about the company, what is already filled, and the open fields. */
-export function buildPrompt(entry: QueueEntry | null, filled: { label: string; value: string }[], open: OpenField[], notes: CompanyFact[] = []): string {
-  return JSON.stringify({ job: jobContext(entry), ...(notes.length ? { company_notes: notes } : {}), already_filled: filled, open_fields: open }, null, 1);
+/** The part that changes per form: the job, the candidate's other roles there, what is known about the company, what is already filled, and the open fields. */
+export function buildPrompt(entry: QueueEntry | null, filled: { label: string; value: string }[], open: OpenField[], { notes = [], others = [] }: { notes?: CompanyFact[]; others?: OtherRole[] } = {}): string {
+  return JSON.stringify({ job: jobContext(entry), ...(entry ? { other_roles_here: others } : {}), ...(notes.length ? { company_notes: notes } : {}), already_filled: filled, open_fields: open }, null, 1);
 }
 
 /** Pulls the JSON object out of the writer's reply, whether or not it wrapped it in a code fence. */
@@ -428,10 +429,10 @@ async function researchApi(input: string, system: string, meta: { purpose: Write
 /** One plain writer call with a system prompt, for checks. Recorded like any other call. */
 export const askWriter = (prompt: string, system: string): Promise<string> => callWriter(prompt, system, { purpose: "log", jobId: "doctor" });
 
-export async function resolveOpenFields(profile: Profile, entry: QueueEntry | null, filled: { label: string; value: string }[], open: OpenField[]): Promise<Resolution> {
+export async function resolveOpenFields(profile: Profile, entry: QueueEntry | null, filled: { label: string; value: string }[], open: OpenField[], others: OtherRole[] = []): Promise<Resolution> {
   if (!open.length) return { verdict: "ready", reason: "", answers: [] };
   const notes = entry && wantsResearch(open) ? await companyNotes(entry, (input, system) => researchCompany(input, system, entry.job.id)) : [];
-  const res = parseResolution(await runWriter(buildPrompt(entry, filled, open, notes), buildSystem(profile), { purpose: "resolve", jobId: entry?.job.id ?? "" }));
+  const res = parseResolution(await runWriter(buildPrompt(entry, filled, open, { notes, others }), buildSystem(profile), { purpose: "resolve", jobId: entry?.job.id ?? "" }));
   const known = new Set(open.map((f) => f.selector));
   return { ...res, answers: res.answers.filter((a) => known.has(a.selector)) };
 }

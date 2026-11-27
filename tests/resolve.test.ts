@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildPrompt, buildSystem, candidateContext, contextFingerprint, parseResolution, type OpenField } from "../src/answers/resolve.js";
+import { otherRolesHere } from "../src/jobs/queue.js";
 import { ProfileSchema } from "../src/profile/schema.js";
 
 const profile = ProfileSchema.parse(JSON.parse(readFileSync(new URL("../data/profile.example.json", import.meta.url), "utf8")));
@@ -50,6 +51,16 @@ describe("the writer's prompt", () => {
   it("includes the posting when there is one", () => {
     const entry = { job: { id: "j", source: "s", company: "Acme", title: "SWE Intern", url: "https://x/1", ats: "greenhouse", locations: ["Toronto, ON"], postedAt: null, terms: [], sponsorship: "unknown", degrees: [], category: null, description: "We build rockets." }, fit: null, preFilterReason: null, status: "queued", statusReason: null, attempts: 0, discoveredAt: "", updatedAt: "", appliedAt: null, notes: null } as unknown as Parameters<typeof buildPrompt>[0];
     expect(JSON.parse(buildPrompt(entry, [], open)).job).toMatchObject({ company: "Acme", description: "We build rockets." });
+  });
+  it("tells the writer the candidate's other roles at the same employer that are sent or in this run, and not those merely queued", () => {
+    const role = (id: string, company: string, title: string, status: string) => ({ job: { id, source: "s", company, title, url: `https://x/${id}`, ats: "ashby", locations: [], postedAt: null, terms: [], sponsorship: "unknown", degrees: [], category: null }, fit: null, preFilterReason: null, status, statusReason: null, attempts: 0, discoveredAt: "", updatedAt: "", appliedAt: null, notes: null }) as unknown as Parameters<typeof otherRolesHere>[1];
+    const here = role("a", "Acme", "Server Intern", "in_progress");
+    const entries = [here, role("b", "Acme, Inc.", "Mobile Intern", "in_progress"), role("c", "ACME", "Data Intern", "applied"), role("d", "Acme", "Old Intern", "skipped"), role("e", "Other Co", "Server Intern", "in_progress"), role("f", "Acme", "Queued Intern", "queued"), role("g", "Acme", "Rehearsed Intern", "queued")];
+    const others = otherRolesHere(entries, here, new Set(["a", "g"]));
+    expect(others).toEqual([{ title: "Mobile Intern", sent: false }, { title: "Data Intern", sent: true }, { title: "Rehearsed Intern", sent: false }]);
+    expect(JSON.parse(buildPrompt(here, [], open, { others })).other_roles_here).toEqual(others);
+    expect(JSON.parse(buildPrompt(here, [], open)).other_roles_here).toEqual([]);
+    expect(system).toContain("never say this is the only one");
   });
   it("carries no secret and no resume path", () => {
     const text = system + JSON.stringify(prompt);

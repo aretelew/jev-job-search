@@ -17,7 +17,7 @@ import { assist, notify, waitingWords } from "./assist.js";
 import { logNotes } from "../answers/resolve.js";
 import { JevClient } from "../jev/client.js";
 import { applyUrlFor, hostIs, type Job } from "../jobs/normalize.js";
-import { loadQueue, mutateQueue, RUN_OWNED, sortEntries, updateEntry, type QueueEntry } from "../jobs/queue.js";
+import { employerKey, loadQueue, mutateQueue, otherRolesHere, RUN_OWNED, sortEntries, updateEntry, type QueueEntry } from "../jobs/queue.js";
 import { withStore } from "../util/store.js";
 import { rememberWalledHost } from "../jobs/walled.js";
 import { learn, loadKnowledge } from "../knowledge/sites.js";
@@ -96,15 +96,6 @@ export function pickJobs(entries: QueueEntry[], ids: string[], o: { count: numbe
     else picked.push(e);
   }
   return { picked, refused };
-}
-
-/** One employer under its spellings: "DoorDash", "Doordash Canada" and "DoorDash, Inc." pace together. */
-export function employerKey(company: string): string {
-  return company
-    .toLowerCase()
-    .replace(/\b(inc|ltd|llc|corp|corporation|co|company|limited|canada|usa|technologies|labs|group)\b\.?/g, "")
-    .replace(/[^a-z0-9]+/g, "")
-    .trim();
 }
 
 /**
@@ -223,10 +214,14 @@ export async function waitedAtSignIn(e: QueueEntry, r: FillReport, o: { waitMs?:
 /** A form whose values did not land on its first page is worth one more go: a page that loaded badly is often fine the second time. */
 const worthAnotherGo = (r: FillReport) => r.state === "filled" && r.page === 1 && !r.stuck && r.failed.length > 0;
 
-/** Settles what JEV left open on the page a job's tab shows: from the answer memory, or by Claude. A writer error leaves the form as it was. */
-export async function resolvePage(jev: JevClient, profile: Profile, entry: QueueEntry | null, r: FillReport, fresh: boolean): Promise<FillReport> {
+/**
+ * Settles what JEV left open on the page a job's tab shows: from the answer memory, or by Claude. A writer error leaves the form as it was.
+ * `inRun` names the jobs of this run, so the writer knows the candidate's other roles at the same employer.
+ */
+export async function resolvePage(jev: JevClient, profile: Profile, entry: QueueEntry | null, r: FillReport, fresh: boolean, inRun: ReadonlySet<string> = new Set()): Promise<FillReport> {
   try {
-    return await resolveJob(forJob(profile, entry), entry, r.jobId, { jev, fresh });
+    const others = entry ? otherRolesHere(loadQueue().entries, entry, inRun) : [];
+    return await resolveJob(forJob(profile, entry), entry, r.jobId, { jev, fresh, others });
   } catch (err) {
     return { ...r, ready: false, reason: `writer: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -494,21 +489,21 @@ export function askAgain(r: FillReport, seen: Set<string>): boolean {
 }
 
 /** Takes a form from its filled first page to its last: each page resolved, then the form's own Next. */
-async function walk(jev: JevClient, profile: Profile, e: QueueEntry, first: FillReport, o: RunOptions): Promise<FillReport> {
+async function walk(jev: JevClient, profile: Profile, e: QueueEntry, first: FillReport, o: RunOptions, inRun: ReadonlySet<string>): Promise<FillReport> {
   let r = first;
   for (;;) {
     // A form that could not be opened has nothing to resolve.
     if (r.state !== "filled") return r;
     const open = r.drafts.length + r.reviews.length + r.failed.length;
     if (open) liveStep(e.job.id, "writing", `Page ${r.page}: ${writerName().name} is answering ${open} open question${open === 1 ? "" : "s"}`, r.page);
-    r = await resolvePage(jev, profile, e, r, o.fresh);
+    r = await resolvePage(jev, profile, e, r, o.fresh, inRun);
     // What did not take its value goes back to the writer with the reason (a list that has no such choice, a box that
     // shows something else), instead of the form being given up. It stops when a round changes nothing.
     const seen = new Set<string>();
     for (let round = 1; round < RUN.resolveRounds && askAgain(r, seen); round++) {
       if (!o.quiet) console.log(`${e.job.company}: ${r.failed.length} box(es) did not take their value. Asking Claude how to answer them (round ${round + 1}).`);
       liveStep(e.job.id, "writing", `Page ${r.page}: ${r.failed.length} box(es) did not take their value, asking again (round ${round + 1})`, r.page);
-      r = await resolvePage(jev, profile, e, r, true);
+      r = await resolvePage(jev, profile, e, r, true, inRun);
     }
     if (!shouldAdvance(r)) return r;
     liveStep(e.job.id, "next_page", `Page ${r.page} done, going to page ${r.page + 1}`, r.page + 1);
@@ -565,6 +560,7 @@ export async function pipeline(entries: QueueEntry[], o: RunOptions): Promise<{ 
   const after: Promise<void>[] = [];
   /** Jobs to fill once more when the rest are done, each with the window to itself. */
   const again: QueueEntry[] = [];
+  const inRun = new Set(entries.map((e) => e.job.id));
   liveJobs(entries);
   const finish = async (e: QueueEntry, r: FillReport) => {
     reports[entries.indexOf(e)] = r;
@@ -585,7 +581,7 @@ export async function pipeline(entries: QueueEntry[], o: RunOptions): Promise<{ 
     if (o.waitAtSignIn && (await waitedAtSignIn(e, first))) first = await fillOnce(jev, profile, e, o.dry);
     reports[entries.indexOf(e)] = first;
     const rest = (async () => {
-      const r = o.fillOnly ? first : await writer(() => walk(jev, profile, e, first, o));
+      const r = o.fillOnly ? first : await writer(() => walk(jev, profile, e, first, o, inRun));
       if (RUN.fillAttempts > 1 && worthAnotherGo(r)) again.push(e);
       else await finish(e, r);
     })().catch((err) => stopped(e, err));
@@ -603,7 +599,7 @@ export async function pipeline(entries: QueueEntry[], o: RunOptions): Promise<{ 
     liveStep(e.job.id, "waiting", "Some values did not stick. It is filled once more when the others are done");
     try {
       const first = await fillOnce(jev, profile, e, o.dry);
-      await finish(e, o.fillOnly ? first : await walk(jev, profile, e, first, o));
+      await finish(e, o.fillOnly ? first : await walk(jev, profile, e, first, o, inRun));
     } catch (err) {
       stopped(e, err);
     }

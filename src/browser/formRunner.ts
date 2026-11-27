@@ -17,7 +17,7 @@ import { greenhouseFormFor } from "../sources/ats/greenhouse.js";
 import type { Profile } from "../profile/schema.js";
 import { loadMemory, recallExact, recallForm, recallSameFields, recallSimilar, remember, saveMemory, type Recalled } from "../answers/memory.js";
 import { contextFingerprint, resolveOpenFields, type OpenField, type Resolution } from "../answers/resolve.js";
-import type { QueueEntry } from "../jobs/queue.js";
+import type { OtherRole, QueueEntry } from "../jobs/queue.js";
 import { closeTab, ensureBrowser, newBackgroundWindow, Page, sleep } from "./cdp.js";
 import { candidateOptions, closestOptions, readDropdownOptions } from "./dropdowns.js";
 import { openSections } from "./sections.js";
@@ -477,7 +477,7 @@ async function readBack(page: Page, d: FieldsDump, plan: FillPlan, failedRaw: Fa
  * Hands every field still open on a filled form to Claude, writes its answers into the page,
  * reads them back, and records whether the form is now ready to submit.
  */
-export async function resolveJob(profile: Profile, entry: QueueEntry | null, jobId: string, opts: { jev?: JevClient; fresh?: boolean } = {}): Promise<FillReport> {
+export async function resolveJob(profile: Profile, entry: QueueEntry | null, jobId: string, opts: { jev?: JevClient; fresh?: boolean; others?: OtherRole[] } = {}): Promise<FillReport> {
   const r = loadReport(jobId);
   if (r.state !== "filled" || r.stuck || isClean(r)) return r;
   const { dump: d, plan } = loadPlan(jobId);
@@ -514,12 +514,16 @@ export async function resolveJob(profile: Profile, entry: QueueEntry | null, job
     const fingerprint = contextFingerprint(profile);
     const useMemory = MEMORY.enabled && !opts.fresh;
     const mem = useMemory ? loadMemory() : null;
+    // Other roles at this employer change what is true on this form ("are you applying for more than one?"),
+    // so what this form was told last time is reused only when there are none.
+    const others = opts.others ?? [];
+    const formMem = others.length ? null : mem;
     // The same form with the same open fields was resolved before: what was read then is what goes in now.
     // A list that turned an answer down has shown that the remembered answer does not fit it. That question goes to the
     // writer again, with what the list offers, and the form is not taken as the same one resolved before.
     const turnedDown = new Set(openFields.filter((f) => UNFIT.test(f.why)).map((f) => f.selector));
     const askMemory = openFields.filter((f) => !turnedDown.has(f.selector));
-    const sameForm = mem && !turnedDown.size ? recallForm(mem, memoryKey, fingerprint, openFields) : null;
+    const sameForm = formMem && !turnedDown.size ? recallForm(formMem, memoryKey, fingerprint, openFields) : null;
     let recalled = new Map<string, Recalled>();
     let resolution: Resolution;
     if (sameForm) {
@@ -527,7 +531,7 @@ export async function resolveJob(profile: Profile, entry: QueueEntry | null, job
       recalled = new Map(sameForm.answers.map((a) => [a.selector, { value: a.value, reusable: a.reusable, source: "same form", from: company }]));
     } else {
       if (mem) {
-        recalled = recallSameFields(mem, memoryKey, fingerprint, askMemory);
+        if (formMem) recalled = recallSameFields(formMem, memoryKey, fingerprint, askMemory);
         for (const [selector, hit] of recallExact(mem, fingerprint, company, askMemory.filter((f) => !recalled.has(f.selector)))) recalled.set(selector, hit);
         const rest = askMemory.filter((f) => !recalled.has(f.selector));
         if (opts.jev && rest.length) {
@@ -538,7 +542,7 @@ export async function resolveJob(profile: Profile, entry: QueueEntry | null, job
       }
       const rest = openFields.filter((f) => !recalled.has(f.selector));
       const settled = openFields.filter((f) => recalled.has(f.selector) && f.kind !== "checkbox").map((f) => ({ label: withQuestion(f.selector, f.label), value: recalled.get(f.selector)?.value ?? "" }));
-      const fresh = await resolveOpenFields(profile, entry, [...filled, ...settled], rest);
+      const fresh = await resolveOpenFields(profile, entry, [...filled, ...settled], rest, others);
       resolution = { ...fresh, answers: [...[...recalled].map(([selector, hit]) => ({ selector, value: hit.value, reusable: hit.reusable })), ...fresh.answers] };
       // The sheet note written for this posting last time is kept when Claude is not asked again.
       const prior = mem?.forms[memoryKey];

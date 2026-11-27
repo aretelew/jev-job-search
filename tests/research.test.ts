@@ -68,7 +68,7 @@ describe("the facts that come back", () => {
 
   it("go to the writer in the form's prompt, and are left out when there are none", () => {
     const facts = [{ fact: "They run on Postgres.", source: "https://example.com" }];
-    expect(JSON.parse(buildPrompt(entry(), [], [], facts)).company_notes).toEqual(facts);
+    expect(JSON.parse(buildPrompt(entry(), [], [], { notes: facts })).company_notes).toEqual(facts);
     expect("company_notes" in JSON.parse(buildPrompt(entry(), [], []))).toBe(false);
   });
 });
