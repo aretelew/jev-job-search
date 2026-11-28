@@ -103,7 +103,8 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
     const errors: string[] = [];
     page.on("Runtime.exceptionThrown", (p) => void errors.push(JSON.stringify(p).slice(0, 300)));
     await page.navigate(origin);
-    for (let i = 0; i < 40 && !(await page.evaluate<boolean>("!!document.querySelector('#nav [data-screen]')").catch(() => false)); i++) await sleep(150);
+    // "Needs you" and "Daily run" join the nav once their data has come, so wait for all four.
+    for (let i = 0; i < 40 && !(await page.evaluate<boolean>("document.querySelectorAll('#nav [data-screen]').length === 4").catch(() => false)); i++) await sleep(150);
     expect(errors).toEqual([]);
     const nav = await page.evaluate<string[]>("[...document.querySelectorAll('#nav [data-screen]')].map((b) => b.textContent)");
     expect(nav).toEqual(["Overview", "Needs you", "Applications", "Daily run"]);

@@ -5,6 +5,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     environment: "node",
     clearMocks: true,
+    globalSetup: ["tests/helpers/tempRoot.ts"],
     setupFiles: ["tests/helpers/orphan.ts"],
   },
 });
